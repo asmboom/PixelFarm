@@ -82,8 +82,11 @@
     <Compile Include="LayoutFarm.DrawingGL\0_Start\CanvasGLPortal.cs" />
     <Compile Include="LayoutFarm.DrawingGL\Implementation\GLBitmapTextureHelper.cs" />
     <Compile Include="LayoutFarm.DrawingGL\Implementation\MyBitmapGL.cs" />
+    <Compile Include="LayoutFarm.DrawingGL\MyCanvas_GL\1_MyCanvasGL_Specific.cs" />
+    <Compile Include="LayoutFarm.DrawingGL\MyCanvas_GL\2_MyCanvasGL_CoordinateAndClip.cs" />
+    <Compile Include="LayoutFarm.DrawingGL\MyCanvas_GL\3_MyCanvasGL_DrawGraphics.cs" />
+    <Compile Include="LayoutFarm.DrawingGL\MyCanvas_GL\4_MyCanvasGL_TextAndFonts.cs" />
     <Compile Include="LayoutFarm.DrawingGL\MyCanvas_GL\GdiTextBoard.cs" />
-    <Compile Include="LayoutFarm.DrawingGL\MyCanvas_GL\MyCanvasGL_specific.cs" />
     <Compile Include="myfonts_dll.Designer.cs">
       <DependentUpon>myfonts_dll.resx</DependentUpon>
       <AutoGen>True</AutoGen>
