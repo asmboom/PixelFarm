@@ -18,15 +18,21 @@ namespace LayoutFarm.DrawingGL
         public PixelFarm.Agg.Fonts.Font CurrentFont
         {
             get { return this.currentFont; }
-            set { this.currentFont = value; }
+            set
+            {
+                if (value == null)
+                {
+                }
+                this.currentFont = value;
+            }
         }
 
-        public void Print(string t, double x, double y)
+        public void Print(LayoutFarm.Drawing.Color color, string t, double x, double y)
         {
             var buff = t.ToCharArray();
-            Print(buff, 0, buff.Length, x, y);
+            Print(color, buff, 0, buff.Length, x, y);
         }
-        public void Print(char[] buffer, int start, int len, double x, double y)
+        public void Print(LayoutFarm.Drawing.Color color, char[] buffer, int start, int len, double x, double y)
         {
 
             if (this.currentFont.IsAtlasFont)
@@ -34,7 +40,8 @@ namespace LayoutFarm.DrawingGL
                 //temp hard-code here!
                 PixelFarm.Agg.Fonts.GdiTextureFont textureFont = (PixelFarm.Agg.Fonts.GdiTextureFont)currentFont;
                 var srcAndDestList = textureFont.GetGlyphPos(buffer, start, len, (int)x, (int)y);
-                canvas2d.DrawImages(textureFont.BmpBoard, srcAndDestList);
+                //***
+                canvas2d.DrawGlyphImages(color, textureFont.BmpBoard, srcAndDestList);
             }
             else
             {
