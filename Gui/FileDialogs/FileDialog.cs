@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace MatterHackers.Agg.UI
 {
@@ -9,18 +11,16 @@ namespace MatterHackers.Agg.UI
 		public delegate void SelectFolderDialogDelegate( SelectFolderDialogParams folderParams );
 		public delegate void SaveFileDialogDelegate( SaveFileDialogParams saveParams );
 
-		public abstract Stream OpenFileDialog(ref OpenFileDialogParams openParams);
 		public abstract bool OpenFileDialog(OpenFileDialogParams openParams, OpenFileDialogDelegate callback);
-
-        public abstract string SelectFolderDialog(ref SelectFolderDialogParams folderParams);
 		public abstract bool SelectFolderDialog(SelectFolderDialogParams folderParams, SelectFolderDialogDelegate callback);
-
-        public abstract Stream SaveFileDialog(ref SaveFileDialogParams saveParams);
 		public abstract bool SaveFileDialog(SaveFileDialogParams saveParams, SaveFileDialogDelegate callback);
+		public abstract string ResolveFilePath(string path);
     }
 
     public static class FileDialog
     {
+        static string lastDirectoryUsed = "";
+
         static FileDialogCreator fileDialogCreatorPlugin = null;
         static FileDialogCreator FileDialogCreatorPlugin
         {
@@ -42,26 +42,33 @@ namespace MatterHackers.Agg.UI
             }
         }
 
-
-
-        public static Stream OpenFileDialog(ref OpenFileDialogParams openParams)
+        public static IEnumerable<string> ResolveFilePaths(IEnumerable<string> filePaths)
         {
-            return FileDialogCreatorPlugin.OpenFileDialog(ref openParams);
-        }
-
-        public static string SelectFolderDialog(ref SelectFolderDialogParams folderParams)
-        {
-            return FileDialogCreatorPlugin.SelectFolderDialog(ref folderParams);
-        }
-
-        public static Stream SaveFileDialog(ref SaveFileDialogParams saveParams)
-        {
-            return FileDialogCreatorPlugin.SaveFileDialog(ref saveParams);
+            // Only perform Mac file reference resoltion when the string starts with the expected token
+            return filePaths.Select(path => !path.StartsWith ("/.file") ? path : FileDialogCreatorPlugin.ResolveFilePath(path));
         }
 
 		public static bool OpenFileDialog(OpenFileDialogParams openParams, FileDialogCreator.OpenFileDialogDelegate callback)
 		{
-			return FileDialogCreatorPlugin.OpenFileDialog(openParams, callback);
+            return FileDialogCreatorPlugin.OpenFileDialog(openParams, (OpenFileDialogParams outputOpenParams) =>
+                {
+                    try
+                    {
+                        if (outputOpenParams.FileName != "")
+                        {
+                            string directory = Path.GetDirectoryName(outputOpenParams.FileName);
+                            if (directory != null && directory != "")
+                            {
+                                lastDirectoryUsed = directory;
+                            }
+                        }
+                    }
+                    catch(Exception)
+                    {
+                    }
+                    callback(outputOpenParams);
+                }
+            );
 		}
 
 		public static bool SelectFolderDialog(SelectFolderDialogParams folderParams, FileDialogCreator.SelectFolderDialogDelegate callback)
@@ -71,7 +78,45 @@ namespace MatterHackers.Agg.UI
 
 		public static bool SaveFileDialog(SaveFileDialogParams saveParams, FileDialogCreator.SaveFileDialogDelegate callback)
 		{
-			return FileDialogCreatorPlugin.SaveFileDialog(saveParams, callback);
-		}
+            return FileDialogCreatorPlugin.SaveFileDialog(saveParams, (SaveFileDialogParams outputSaveParams) =>
+                {
+                    try
+                    {
+                        if (outputSaveParams.FileName != "")
+                        {
+                            string directory = Path.GetDirectoryName(outputSaveParams.FileName);
+                            if(directory != null && directory != "")
+                            {
+                                lastDirectoryUsed = directory;
+                            }
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                    callback(outputSaveParams);
+                }
+            );
+        }
+
+        public static string LastDirectoryUsed
+        {
+            get
+            {
+                if (lastDirectoryUsed == null
+                    || lastDirectoryUsed == ""
+                    || !Directory.Exists(lastDirectoryUsed))
+                {
+                    return System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal);
+                }
+
+                return lastDirectoryUsed;
+            }
+
+            set
+            {
+                lastDirectoryUsed = value;
+            }
+        }
     }
 }

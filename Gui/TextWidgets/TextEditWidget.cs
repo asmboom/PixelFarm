@@ -54,8 +54,8 @@ namespace MatterHackers.Agg.UI
         private int borderWidth = 0;
         private int borderRadius = 0;
 
-        public static EventHandler ShowSoftwareKeyboard = null;
-        public static EventHandler HideSoftwareKeyboard = null;
+		public static event EventHandler ShowSoftwareKeyboard;
+		public static event EventHandler HideSoftwareKeyboard;
 
         public RGBA_Bytes TextColor
         {
@@ -241,19 +241,39 @@ namespace MatterHackers.Agg.UI
         {
             if (ShowSoftwareKeyboard != null)
             {
-                ShowSoftwareKeyboard(this, null);
+				UiThread.RunOnIdle((state) =>
+				{
+					ShowSoftwareKeyboard(this, null);
+				});
             }
             OnGotFocus(e);
         }
 
         void internalTextEditWidget_LostFocus(object sender, EventArgs e)
         {
-            if (HideSoftwareKeyboard != null)
-            {
-                HideSoftwareKeyboard(this, null);
-            }
+			OnHideSoftwareKeyboard();
             OnLostFocus(e);
         }
+
+		public override void OnClosed(EventArgs e)
+		{
+			if (Focused)
+			{
+				OnHideSoftwareKeyboard();
+			}
+			base.OnClosed(e);
+		}
+
+		private void OnHideSoftwareKeyboard()
+		{
+			if (HideSoftwareKeyboard != null)
+			{
+				UiThread.RunOnIdle((state) =>
+				{
+					HideSoftwareKeyboard(this, null);
+				});
+			}
+		}
 
         void internalTextEditWidget_EnterPressed(object sender, KeyEventArgs keyEvent)
         {

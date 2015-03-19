@@ -147,49 +147,30 @@ namespace MatterHackers.PolygonMesh.Processors
             return true;
         }
 
-        public static List<MeshGroup> Load(string fileName, ReportProgressRatio reportProgress = null)
+        public static Mesh Load(string fileName, ReportProgressRatio reportProgress = null)
         {
-            Mesh loadedMesh = null;
-            if (Path.GetExtension(fileName).ToUpper() == ".STL")
-            {
-                try
-                {
-                    if (File.Exists(fileName))
-                    {
-                        Stream fileStream = File.OpenRead(fileName);
+            // Early exit if not STL
+            if (Path.GetExtension(fileName).ToUpper() != ".STL") return null;
 
-                        loadedMesh = ParseFileContents(fileStream, reportProgress);
-                    }
-                }
-#if DEBUG
-                catch (IOException)
-                {
-                    return null;
-                }
-#else
-                catch (Exception)
-                {
-                    return null;
-                }
-#endif
-            }
-
-            List<MeshGroup> meshGroups = new List<MeshGroup>();
-            meshGroups.Add(new MeshGroup());
-            if (loadedMesh != null)
+            using(Stream fileStream = File.OpenRead(fileName))
             {
-                meshGroups[0].Meshes.Add(loadedMesh);
-                return meshGroups;
+                // Call the Load signature taking a stream and file extension
+                return Load(fileStream, reportProgress);
             }
-            return null;
         }
 
+        // Note: Changing the Load(Stream) return type - this is a breaking change but methods with the same name should return the same type
         public static Mesh Load(Stream fileStream, ReportProgressRatio reportProgress = null)
         {
-            Mesh loadedMesh = null;
             try
             {
-                loadedMesh = ParseFileContents(fileStream, reportProgress);
+                // Parse STL
+                Mesh loadedMesh = ParseFileContents(fileStream, reportProgress);
+
+                // TODO: Sync with AMF processing and have ParseFileContents return List<MeshGroup>?
+                //
+                // Return the loaded mesh wrapped in a MeshGroup, wrapped in a List
+				return loadedMesh;
             }
 #if DEBUG
             catch (IOException)
@@ -197,13 +178,13 @@ namespace MatterHackers.PolygonMesh.Processors
                 return null;
             }
 #else
+            // TODO: Consider not supressing exceptions like this or at least logging them. Troubleshooting when this
+            // scenario occurs is impossible and likely results in an undiagnosable null reference error
             catch (Exception)
             {
                 return null;
             }
 #endif
-
-            return loadedMesh;
         }
 
         public static Mesh ParseFileContents(Stream stlStream, ReportProgressRatio reportProgress)
@@ -261,7 +242,7 @@ namespace MatterHackers.PolygonMesh.Processors
                         switch (vectorIndex)
                         {
                             case 1:
-                                vector0.x = Convert.ToDouble(parts[1]);
+								vector0.x = Convert.ToDouble(parts[1]);
                                 vector0.y = Convert.ToDouble(parts[2]);
                                 vector0.z = Convert.ToDouble(parts[3]);
                                 break;
@@ -276,10 +257,10 @@ namespace MatterHackers.PolygonMesh.Processors
                                 vector2.z = Convert.ToDouble(parts[3]);
                                 if (!Vector3.Collinear(vector0, vector1, vector2))
                                 {
-                                    Vertex vertex1 = meshFromStlFile.CreateVertex(vector0, true, true);
-                                    Vertex vertex2 = meshFromStlFile.CreateVertex(vector1, true, true);
-                                    Vertex vertex3 = meshFromStlFile.CreateVertex(vector2, true, true);
-                                    meshFromStlFile.CreateFace(new Vertex[] { vertex1, vertex2, vertex3 }, true);
+                                    Vertex vertex1 = meshFromStlFile.CreateVertex(vector0, CreateOption.CreateNew, SortOption.WillSortLater);
+                                    Vertex vertex2 = meshFromStlFile.CreateVertex(vector1, CreateOption.CreateNew, SortOption.WillSortLater);
+                                    Vertex vertex3 = meshFromStlFile.CreateVertex(vector2, CreateOption.CreateNew, SortOption.WillSortLater);
+                                    meshFromStlFile.CreateFace(new Vertex[] { vertex1, vertex2, vertex3 }, CreateOption.CreateNew);
                                 }
                                 vectorIndex = 0;
                                 break;
@@ -349,10 +330,10 @@ namespace MatterHackers.PolygonMesh.Processors
 
                     if (!Vector3.Collinear(vector[0], vector[1], vector[2]))
                     {
-                        Vertex vertex1 = meshFromStlFile.CreateVertex(vector[0], true, true);
-                        Vertex vertex2 = meshFromStlFile.CreateVertex(vector[1], true, true);
-                        Vertex vertex3 = meshFromStlFile.CreateVertex(vector[2], true, true);
-                        meshFromStlFile.CreateFace(new Vertex[] { vertex1, vertex2, vertex3 }, true);
+                        Vertex vertex1 = meshFromStlFile.CreateVertex(vector[0], CreateOption.CreateNew, SortOption.WillSortLater);
+                        Vertex vertex2 = meshFromStlFile.CreateVertex(vector[1], CreateOption.CreateNew, SortOption.WillSortLater);
+                        Vertex vertex3 = meshFromStlFile.CreateVertex(vector[2], CreateOption.CreateNew, SortOption.WillSortLater);
+                        meshFromStlFile.CreateFace(new Vertex[] { vertex1, vertex2, vertex3 }, CreateOption.CreateNew);
                     }
                 }
                 //uint numTriangles = System.BitConverter.ToSingle(fileContents, 80);
@@ -415,5 +396,61 @@ namespace MatterHackers.PolygonMesh.Processors
             goodParse &= double.TryParse(splitOnSpace[3], out vertexPosition.z);
             return goodParse;
         }
-    }
+
+		public static bool IsBinary(string fileName)
+		{
+			try
+			{
+				using (Stream stlStream = new FileStream(fileName, FileMode.Open))
+				{
+					long bytesInFile = stlStream.Length;
+					if (bytesInFile <= 80)
+					{
+						return false;
+					}
+
+					byte[] first160Bytes = new byte[160];
+					stlStream.Read(first160Bytes, 0, 160);
+					byte[] ByteOredrMark = new byte[] { 0xEF, 0xBB, 0xBF };
+					int startOfString = 0;
+					if (first160Bytes[0] == ByteOredrMark[0] && first160Bytes[0] == ByteOredrMark[0] && first160Bytes[0] == ByteOredrMark[0])
+					{
+						startOfString = 3;
+					}
+					string first160BytesOfSTLFile = System.Text.Encoding.UTF8.GetString(first160Bytes, startOfString, first160Bytes.Length - startOfString);
+					if (first160BytesOfSTLFile.StartsWith("solid") && first160BytesOfSTLFile.Contains("facet"))
+					{
+						return false;
+					}
+				}
+			}
+			catch (Exception)
+			{
+			}
+
+			return true;
+		}
+
+		public static long GetEstimatedMemoryUse(string fileLocation)
+		{
+			try
+			{
+				using (Stream stream = new FileStream(fileLocation, FileMode.Open))
+				{
+					if (IsBinary(fileLocation))
+					{
+						return (long)(stream.Length * 13.5);
+					}
+					else
+					{
+						return (long)(stream.Length * 2.5);
+					}
+				}
+			}
+			catch (Exception)
+			{
+				return 0;
+			}
+		}
+	}
 }

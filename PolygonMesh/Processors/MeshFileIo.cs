@@ -52,7 +52,7 @@ namespace MatterHackers.PolygonMesh.Processors
 
         public OutputType OutputTypeSetting = OutputType.Binary;
         public Dictionary<string, string> MetaDataKeyValue = new Dictionary<string, string>();
-        public int OnlySaveMaterialIndex = -1;
+        public List<int> MaterialIndexsToSave = null;
         public CsgOption CsgOptionState = CsgOption.SimpleInsertVolumes;
         ReportProgressRatio reportProgress = null;
 
@@ -65,14 +65,17 @@ namespace MatterHackers.PolygonMesh.Processors
             this.CsgOptionState = csgOption;
         }
 
-        public MeshOutputSettings(OutputType outputTypeSetting, string[] metaDataKeyValuePairs, ReportProgressRatio reportProgress = null)
+        public MeshOutputSettings(OutputType outputTypeSetting, string[] metaDataKeyValuePairs = null, ReportProgressRatio reportProgress = null)
         {
             this.reportProgress = reportProgress;
 
             this.OutputTypeSetting = outputTypeSetting;
-            for (int i = 0; i < metaDataKeyValuePairs.Length / 2; i++)
+            if (metaDataKeyValuePairs != null)
             {
-                MetaDataKeyValue.Add(metaDataKeyValuePairs[i * 2], metaDataKeyValuePairs[i * 2 + 1]);
+                for (int i = 0; i < metaDataKeyValuePairs.Length / 2; i++)
+                {
+                    MetaDataKeyValue.Add(metaDataKeyValuePairs[i * 2], metaDataKeyValuePairs[i * 2 + 1]);
+                }
             }
         }
     }
@@ -84,19 +87,41 @@ namespace MatterHackers.PolygonMesh.Processors
             return ".STL;.AMF";
         }
 
-        public static List<MeshGroup> Load(string meshPathAndFileName, ReportProgressRatio reportProgress = null)
+
+        public static List<MeshGroup> Load(Stream fileStream, string fileExtension, ReportProgressRatio reportProgress = null)
         {
-            switch (Path.GetExtension(meshPathAndFileName).ToUpper())
+            switch (fileExtension.ToUpper())
             {
                 case ".STL":
-                    return StlProcessing.Load(meshPathAndFileName, reportProgress);
+					Mesh loadedMesh = StlProcessing.Load(fileStream, reportProgress);
+					return (loadedMesh == null) ? null : new List<MeshGroup>(new[] { new MeshGroup(loadedMesh) });
 
                 case ".AMF":
-                    return AmfProcessing.Load(meshPathAndFileName, reportProgress);
+                    return AmfProcessing.Load(fileStream, reportProgress);
 
                 default:
                     return null;
             }
+        }
+
+        public static List<MeshGroup> Load(string meshPathAndFileName, ReportProgressRatio reportProgress = null)
+        {
+            using(Stream stream = File.OpenRead(meshPathAndFileName))
+            {
+                return Load(stream, Path.GetExtension(meshPathAndFileName), reportProgress);
+            }
+        }
+
+        public static bool Save(Mesh mesh, string meshPathAndFileName, MeshOutputSettings outputInfo = null)
+        {
+            return Save(new MeshGroup(mesh), meshPathAndFileName, outputInfo);
+        }
+
+        public static bool Save(MeshGroup meshGroupToSave, string meshPathAndFileName, MeshOutputSettings outputInfo = null)
+        {
+            List<MeshGroup> meshGroupsToSave = new List<MeshGroup>();
+            meshGroupsToSave.Add(meshGroupToSave);
+            return Save(meshGroupsToSave, meshPathAndFileName, outputInfo);
         }
 
         public static bool Save(List<MeshGroup> meshGroupsToSave, string meshPathAndFileName, MeshOutputSettings outputInfo = null)
@@ -128,7 +153,7 @@ namespace MatterHackers.PolygonMesh.Processors
                 {
                     foreach (Mesh mesh in meshGroup.Meshes)
                     {
-                        allPolygons = CsgOperations.PerformOperation(allPolygons, mesh, CsgNode.Union);
+                        allPolygons = CsgOperations.Union(allPolygons, mesh);
                     }
                 }
             }
@@ -139,7 +164,7 @@ namespace MatterHackers.PolygonMesh.Processors
                     foreach (Mesh mesh in meshGroup.Meshes)
                     {
                         int currentMeshMaterialIntdex = MeshMaterialData.Get(mesh).MaterialIndex;
-                        if (outputInfo.OnlySaveMaterialIndex == -1 || outputInfo.OnlySaveMaterialIndex == currentMeshMaterialIntdex)
+                        if (outputInfo.MaterialIndexsToSave == null || outputInfo.MaterialIndexsToSave.Contains(currentMeshMaterialIntdex))
                         {
                             foreach (Face face in mesh.Faces)
                             {
@@ -147,12 +172,12 @@ namespace MatterHackers.PolygonMesh.Processors
                                 foreach (FaceEdge faceEdgeToAdd in face.FaceEdges())
                                 {
                                     // we allow duplicates (the true) to make sure we are not changing the loaded models acuracy.
-                                    Vertex newVertex = allPolygons.CreateVertex(faceEdgeToAdd.firstVertex.Position, true, true);
+                                    Vertex newVertex = allPolygons.CreateVertex(faceEdgeToAdd.firstVertex.Position, CreateOption.CreateNew, SortOption.WillSortLater);
                                     faceVertices.Add(newVertex);
                                 }
 
                                 // we allow duplicates (the true) to make sure we are not changing the loaded models acuracy.
-                                allPolygons.CreateFace(faceVertices.ToArray(), true);
+                                allPolygons.CreateFace(faceVertices.ToArray(), CreateOption.CreateNew);
                             }
                         }
                     }

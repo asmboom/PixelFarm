@@ -38,7 +38,7 @@ using System.Threading;
 using System.Xml;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using ICSharpCode.SharpZipLib.Zip;
+using System.IO.Compression;
 
 using MatterHackers.Agg;
 using MatterHackers.PolygonMesh;
@@ -48,7 +48,8 @@ namespace MatterHackers.PolygonMesh.Processors
 {
     public static class AmfProcessing
     {
-        public static bool Save(List<MeshGroup> meshToSave, string fileName, MeshOutputSettings outputInfo = null)
+
+        public static bool SaveUncompressed(List<MeshGroup> meshToSave, string fileName, MeshOutputSettings outputInfo = null)
         {
             using (FileStream file = new FileStream(fileName, FileMode.Create, FileAccess.Write))
             {
@@ -59,6 +60,26 @@ namespace MatterHackers.PolygonMesh.Processors
         static string Indent(int index)
         {
             return new String(' ', index * 2);
+        }
+
+        /// <summary>
+        /// Writes the mesh to disk in a zip container
+        /// </summary>
+        /// <param name="meshToSave">The mesh to save</param>
+        /// <param name="fileName">The file path to save at</param>
+        /// <param name="outputInfo">Extra meta data to store in the file</param>
+        /// <returns>The results of the save operation</returns>
+        public static bool Save(List<MeshGroup> meshToSave, string fileName, MeshOutputSettings outputInfo = null)
+        {
+            using (Stream stream = File.OpenWrite(fileName))
+            using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry zipEntry = archive.CreateEntry(Path.GetFileName(fileName));
+                using (var entryStream = zipEntry.Open())
+                {
+                    return Save(meshToSave, entryStream, outputInfo);
+                }
+            }
         }
 
         public static bool Save(List<MeshGroup> meshToSave, Stream stream, MeshOutputSettings outputInfo)
@@ -134,12 +155,9 @@ namespace MatterHackers.PolygonMesh.Processors
                                         for (int polyIndex = 0; polyIndex < numPolys; polyIndex++)
                                         {
                                             amfFile.WriteLine(Indent(4) + "<triangle>");
-                                            foreach (FaceEdge faceEdge in face.FaceEdges())
-                                            {
-                                                amfFile.WriteLine(Indent(5) + "<v1>{0}</v1>".FormatWith(firstVertexIndex + mesh.Vertices.IndexOf(positionsCCW[0])));
-                                                amfFile.WriteLine(Indent(5) + "<v2>{0}</v2>".FormatWith(firstVertexIndex + mesh.Vertices.IndexOf(positionsCCW[secondIndex])));
-                                                amfFile.WriteLine(Indent(5) + "<v3>{0}</v3>".FormatWith(firstVertexIndex + mesh.Vertices.IndexOf(positionsCCW[thirdIndex])));
-                                            }
+                                            amfFile.WriteLine(Indent(5) + "<v1>{0}</v1>".FormatWith(firstVertexIndex + mesh.Vertices.IndexOf(positionsCCW[0])));
+                                            amfFile.WriteLine(Indent(5) + "<v2>{0}</v2>".FormatWith(firstVertexIndex + mesh.Vertices.IndexOf(positionsCCW[secondIndex])));
+                                            amfFile.WriteLine(Indent(5) + "<v3>{0}</v3>".FormatWith(firstVertexIndex + mesh.Vertices.IndexOf(positionsCCW[thirdIndex])));
                                             amfFile.WriteLine(Indent(4) + "</triangle>");
 
                                             secondIndex = thirdIndex;
@@ -308,34 +326,38 @@ namespace MatterHackers.PolygonMesh.Processors
 
             // do the loading
             {
-                Stream amfCompressedStream = GetCompressedStreamIfRequired(amfStream);
-                XmlReader xmlTree = XmlReader.Create(amfCompressedStream);
-                while (xmlTree.Read())
+                using (Stream amfCompressedStream = GetCompressedStreamIfRequired(amfStream))
                 {
-                    if (xmlTree.Name == "amf")
+                    XmlReader xmlTree = XmlReader.Create(amfCompressedStream);
+                    while (xmlTree.Read())
                     {
-                        break;
-                    }
-                }
-                double scale = GetScaling(xmlTree);
-
-                ProgressData progressData = new ProgressData(amfStream, reportProgress);
-
-                meshGroups = new List<MeshGroup>();
-
-                while (xmlTree.Read())
-                {
-                    if (xmlTree.Name == "object")
-                    {
-                        using(XmlReader objectTree = xmlTree.ReadSubtree())
+                        if (xmlTree.Name == "amf")
                         {
-                            meshGroups.Add(ReadObject(objectTree, scale, progressData));
-                            if (progressData.LoadCanceled)
+                            break;
+                        }
+                    }
+                    double scale = GetScaling(xmlTree);
+
+                    ProgressData progressData = new ProgressData(amfStream, reportProgress);
+
+                    meshGroups = new List<MeshGroup>();
+
+                    while (xmlTree.Read())
+                    {
+                        if (xmlTree.Name == "object")
+                        {
+                            using (XmlReader objectTree = xmlTree.ReadSubtree())
                             {
-                                return null;
+                                meshGroups.Add(ReadObject(objectTree, scale, progressData));
+                                if (progressData.LoadCanceled)
+                                {
+                                    return null;
+                                }
                             }
                         }
                     }
+
+                    xmlTree.Dispose();
                 }
             }
 
@@ -387,7 +409,25 @@ namespace MatterHackers.PolygonMesh.Processors
             Debug.WriteLine(string.Format("AMF Load in {0:0.00}s", time.Elapsed.TotalSeconds));
 
             amfStream.Close();
-            return meshGroups;
+            bool hasValidMesh = false;
+            foreach (MeshGroup meshGroup in meshGroups)
+            {
+                foreach(Mesh mesh in meshGroup.Meshes)
+                {
+                    if (mesh.Faces.Count > 0)
+                    {
+                        hasValidMesh = true;
+                    }
+                }
+            }
+            if (hasValidMesh)
+            {
+                return meshGroups;
+            }
+            else
+            {
+                return null;
+            }
         }
 
         private static MeshGroup ReadObject(XmlReader xmlTree, double scale, ProgressData progressData)
@@ -495,15 +535,18 @@ namespace MatterHackers.PolygonMesh.Processors
                             }
                             if (indices[0] != indices[1]
                                 && indices[0] != indices[2]
-                                && indices[1] != indices[2])
+                                && indices[1] != indices[2]
+                                && vertices[indices[0]] != vertices[indices[1]]
+                                && vertices[indices[1]] != vertices[indices[2]]
+                                && vertices[indices[2]] != vertices[indices[0]])
                             {
                                 Vertex[] triangle = new Vertex[]
                                 {
-                                    newMesh.CreateVertex(vertices[indices[0]], true, true),
-                                    newMesh.CreateVertex(vertices[indices[1]], true, true),
-                                    newMesh.CreateVertex(vertices[indices[2]], true, true),
+                                    newMesh.CreateVertex(vertices[indices[0]], CreateOption.CreateNew, SortOption.WillSortLater),
+                                    newMesh.CreateVertex(vertices[indices[1]], CreateOption.CreateNew, SortOption.WillSortLater),
+                                    newMesh.CreateVertex(vertices[indices[2]], CreateOption.CreateNew, SortOption.WillSortLater),
                                 };
-                                newMesh.CreateFace(triangle, true);
+                                newMesh.CreateFace(triangle, CreateOption.CreateNew);
                             }
 
                             bool continueProcessing;
@@ -579,16 +622,12 @@ namespace MatterHackers.PolygonMesh.Processors
             }
         }
 
-        private static Stream GetCompressedStreamIfRequired(Stream amfStream)
+        public static Stream GetCompressedStreamIfRequired(Stream amfStream)
         {
             if (IsZipFile(amfStream))
             {
-                ZipFile zip = new ZipFile(amfStream);
-                bool isValid = zip.TestArchive(false);
-                foreach (ZipEntry zipEntry in zip)
-                {
-                    return zip.GetInputStream(zipEntry);
-                }
+                ZipArchive archive = new ZipArchive(amfStream, ZipArchiveMode.Read);
+                return archive.Entries.First().Open();
             }
 
             amfStream.Position = 0;
@@ -633,5 +672,27 @@ namespace MatterHackers.PolygonMesh.Processors
 #endif
             }
         }
-    }
+
+		public static long GetEstimatedMemoryUse(string fileLocation)
+		{
+			try
+			{
+				using (Stream stream = new FileStream(fileLocation, FileMode.Open))
+				{
+					if (IsZipFile(stream))
+					{
+						return (long)(stream.Length * 57);
+					}
+					else
+					{
+						return (long)(stream.Length * 3.7);
+					}
+				}
+			}
+			catch (Exception)
+			{
+				return 0;
+			}
+		}
+	}
 }

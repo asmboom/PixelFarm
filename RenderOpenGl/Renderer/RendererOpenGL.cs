@@ -47,8 +47,13 @@ namespace MatterHackers.RenderOpenGl
 
     public class Graphics2DOpenGL : Graphics2D
     {
+        // We can have a single static instance because all gl rendering is required to happen on the ui thread so there can
+        // be no runtime contention for this object (no thread contention).
+        static AARenderToGLTesselator triangleEddgeInfo = new AARenderToGLTesselator();
+        static ImageBuffer AATextureImage = null;
+
         public bool DoEdgeAntiAliasing = true;
-        RenderToGLTesselator RenderNowTesselator = new RenderToGLTesselator();
+        static RenderToGLTesselator renderNowTesselator = new RenderToGLTesselator();
 
         int width;
         int height;
@@ -149,45 +154,24 @@ namespace MatterHackers.RenderOpenGl
 #endif
         }
 
-		static byte[] CreateBufferForAATexture()
-		{
-			byte[] hardwarePixelBuffer = new byte[1024 * 4 * 4];
-			for (int y = 0; y < 4; y++)
-			{
-				byte alpha = 0;
-				for (int x = 0; x < 1024; x++)
-				{
-					hardwarePixelBuffer[(y * 1024 + x) * 4 + 0] = 255;
-					hardwarePixelBuffer[(y * 1024 + x) * 4 + 1] = 255;
-					hardwarePixelBuffer[(y * 1024 + x) * 4 + 2] = 255;
-					hardwarePixelBuffer[(y * 1024 + x) * 4 + 3] = alpha;
-					alpha = 255;
-				}
-			}
-			return hardwarePixelBuffer;
-		}
-
-        static int AATextureHandle = -1;
         void CheckLineImageCache()
         {
-            if (AATextureHandle == -1)
+			if (AATextureImage == null)
             {
-                // Create the texture handle and display list handle
-                GL.GenTextures(1, out AATextureHandle);
-
-                // Set up some texture parameters for openGL
-                GL.BindTexture(TextureTarget.Texture2D, AATextureHandle);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
-
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
-
-                byte[] hardwarePixelBuffer = CreateBufferForAATexture();
-
-                // Create the texture
-                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, 1024, 4,
-                    0, PixelFormat.Rgba, PixelType.UnsignedByte, hardwarePixelBuffer);
+				AATextureImage = new ImageBuffer(1024, 4, 32, new BlenderBGRA());
+				byte[] hardwarePixelBuffer = AATextureImage.GetBuffer();
+				for (int y = 0; y < 4; y++)
+				{
+					byte alpha = 0;
+					for (int x = 0; x < 1024; x++)
+					{
+						hardwarePixelBuffer[(y * 1024 + x) * 4 + 0] = 255;
+						hardwarePixelBuffer[(y * 1024 + x) * 4 + 1] = 255;
+						hardwarePixelBuffer[(y * 1024 + x) * 4 + 2] = 255;
+						hardwarePixelBuffer[(y * 1024 + x) * 4 + 3] = alpha;
+						alpha = 255;
+					}
+				}
             }
         }
 
@@ -195,9 +179,9 @@ namespace MatterHackers.RenderOpenGl
         {
 			CheckLineImageCache();
             GL.Enable(EnableCap.Texture2D);
-            GL.BindTexture(TextureTarget.Texture2D, AATextureHandle);
+            GL.BindTexture(TextureTarget.Texture2D, RenderOpenGl.ImageGlPlugin.GetImageGlPlugin(AATextureImage, false).GLTextureHandle);
 
-            AARenderToGLTesselator triangleEddgeInfo = new AARenderToGLTesselator();
+            triangleEddgeInfo.Clear();
             Graphics2DOpenGL.SendShapeToTesselator(triangleEddgeInfo, vertexSource);
 
             // now render it
@@ -227,7 +211,8 @@ namespace MatterHackers.RenderOpenGl
             }
             else
             {
-                Graphics2DOpenGL.SendShapeToTesselator(RenderNowTesselator, vertexSource);
+                renderNowTesselator.Clear();
+                Graphics2DOpenGL.SendShapeToTesselator(renderNowTesselator, vertexSource);
             }
 
             PopOrthoProjection();
@@ -302,6 +287,91 @@ namespace MatterHackers.RenderOpenGl
             throw new NotImplementedException();
         }
 
+        public override void Rectangle(double left, double bottom, double right, double top, RGBA_Bytes color, double strokeWidth)
+        {
+#if true
+            // This only works for translation. If we have a rotation or scale in the transform this will have some problems.
+            Affine transform = GetTransform();
+            double fastLeft = left;
+            double fastBottom = bottom;
+            double fastRight = right;
+            double fastTop = top;
+
+            transform.transform(ref fastLeft, ref fastBottom);
+            transform.transform(ref fastRight, ref fastTop);
+
+            if (fastLeft == (int)fastLeft
+                && fastBottom == (int)fastBottom
+                && fastRight == (int)fastRight
+                && fastTop == (int)fastTop)
+            {
+                // FillRectangle will do the traslation so use the original variables
+                FillRectangle(left, bottom, right, bottom + 1, color);
+                FillRectangle(left, top, right, top - 1, color);
+
+                FillRectangle(left, bottom, left + 1, top, color);
+                FillRectangle(right - 1, bottom, right, top, color);
+            }
+            else
+#endif
+            {
+                RoundedRect rect = new RoundedRect(left + .5, bottom + .5, right - .5, top - .5, 0);
+                Stroke rectOutline = new Stroke(rect, strokeWidth);
+
+                Render(rectOutline, color);
+            }
+        }
+
+        public override void FillRectangle(double left, double bottom, double right, double top, IColorType fillColor)
+        {
+            // This only works for translation. If we have a rotation or scale in the transform this will have some problems.
+            Affine transform = GetTransform();
+            double fastLeft = left;
+            double fastBottom = bottom;
+            double fastRight = right;
+            double fastTop = top;
+
+            transform.transform(ref fastLeft, ref fastBottom);
+            transform.transform(ref fastRight, ref fastTop);
+
+            if (fastLeft == (int)fastLeft
+                && fastBottom == (int)fastBottom
+                && fastRight == (int)fastRight
+                && fastTop == (int)fastTop)
+            {
+                PushOrthoProjection();
+
+                GL.Disable(EnableCap.Texture2D);
+                GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
+                GL.Enable(EnableCap.Blend);
+
+                GL.Color4(fillColor.Red0To255, fillColor.Green0To255, fillColor.Blue0To255, fillColor.Alpha0To255);
+
+                GL.Begin(BeginMode.Triangles);
+                // triangel 1
+                {
+                    GL.Vertex2(fastLeft, fastBottom);
+                    GL.Vertex2(fastRight, fastBottom);
+                    GL.Vertex2(fastRight, fastTop);
+                }
+
+                // triangel 2
+                {
+                    GL.Vertex2(fastLeft, fastBottom);
+                    GL.Vertex2(fastRight, fastTop);
+                    GL.Vertex2(fastLeft, fastTop);
+                }
+                GL.End();
+
+                PopOrthoProjection();
+            }
+            else
+            {
+                RoundedRect rect = new RoundedRect(left, bottom, right, top, 0);
+                Render(rect, fillColor.GetAsRGBA_Bytes());
+            }
+        }
+        
         public override void Clear(IColorType color)
         {
             Affine transform = GetTransform();

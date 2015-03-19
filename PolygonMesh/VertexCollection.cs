@@ -37,67 +37,12 @@ using MatterHackers.Agg;
 
 namespace MatterHackers.PolygonMesh
 {
-    public class VertexXAxisSorter : IComparer<Vertex>
-    {
-        public VertexXAxisSorter()
-        {
-        }
-
-        public int Compare(Vertex a, Vertex b)
-        {
-            return a.Position.x.CompareTo(b.Position.x);
-        }
-    }
-
-    public class VertexDistanceFromPointSorter : IComparer<Vertex>
-    {
-        public VertexDistanceFromPointSorter()
-        {
-        }
-
-        public int Compare(Vertex a, Vertex b)
-        {
-            if (a.Position.x < b.Position.x)
-            {
-                return -1;
-            }
-            else if (a.Position.x == b.Position.x)
-            {
-                if (a.Position.y < b.Position.y)
-                {
-                    return -1;
-                }
-                else if (a.Position.y == b.Position.y)
-                {
-                    if (a.Position.z < b.Position.z)
-                    {
-                        return -1;
-                    }
-                    else if (a.Position.z == b.Position.z)
-                    {
-                        return 0;
-                    }
-                    else
-                    {
-                        return 1;
-                    }
-                }
-                else
-                {
-                    return 1;
-                }
-            }
-            else
-            {
-                return 1;
-            }
-        }
-    }
-
     public class VertexCollecton : IEnumerable
     {
         List<Vertex> vertices = new List<Vertex>();
-        IComparer<Vertex> vertexSorter = new VertexDistanceFromPointSorter();
+        //VertexSorterBase vertexSorter = new VertexXAxisSorter();
+        //VertexSorterBase vertexSorter = new VertexDistanceFromPointSorter();
+        VertexSorterBase vertexSorter = new VertexXYZAxisWithRotation();
 
         bool isSorted = true;
         public bool IsSorted
@@ -113,6 +58,12 @@ namespace MatterHackers.PolygonMesh
         public Vertex this[int index]
         {
             get { return vertices[index]; }
+        }
+
+        public int Capacity
+        {
+            get { return vertices.Capacity; }
+            set { vertices.Capacity = value; }
         }
 
         public IEnumerator GetEnumerator()
@@ -136,34 +87,8 @@ namespace MatterHackers.PolygonMesh
             {
                 throw new Exception("You can't Find a vertex in an unsorted VertexCollection. Sort it first (or add the vertexes without preventing sorting).");
             }
-            List<Vertex> foundVertexes = new List<Vertex>();
 
-            Vertex testPos = new Vertex(position);
-            int index = vertices.BinarySearch(testPos, vertexSorter);
-            if (index < 0)
-            {
-                index = ~index;
-            }
-            // we have the starting index now get all the vertices that are close enough starting from here
-            double maxDistanceToConsiderVertexAsSameSquared = maxDistanceToConsiderVertexAsSame * maxDistanceToConsiderVertexAsSame;
-            for (int i = index; i < vertices.Count; i++)
-            {
-                if (Math.Abs(vertices[i].Position.x - position.x) > maxDistanceToConsiderVertexAsSame)
-                {
-                    // we are too far away in x, we are done with this direction
-                    break;
-                }
-                AddToListIfSameEnough(position, foundVertexes, maxDistanceToConsiderVertexAsSameSquared, i);
-            }
-            for (int i = index - 1; i >= 0; i--)
-            {
-                if (Math.Abs(vertices[i].Position.x - position.x) > maxDistanceToConsiderVertexAsSame)
-                {
-                    // we are too far away in x, we are done with this direction
-                    break;
-                }
-                AddToListIfSameEnough(position, foundVertexes, maxDistanceToConsiderVertexAsSameSquared, i);
-            }
+            List<Vertex> foundVertexes = vertexSorter.FindVertices(vertices, position, maxDistanceToConsiderVertexAsSame);
 
 #if VALIDATE_SEARCH
             if (testList.Count != findList.Count)
@@ -180,22 +105,6 @@ namespace MatterHackers.PolygonMesh
 #endif
 
             return foundVertexes;
-        }
-
-        private void AddToListIfSameEnough(Vector3 position, List<Vertex> findList, double maxDistanceToConsiderVertexAsSameSquared, int i)
-        {
-            if (vertices[i].Position == position)
-            {
-                findList.Add(vertices[i]);
-            }
-            else
-            {
-                double distanceSquared = (vertices[i].Position - position).LengthSquared;
-                if (distanceSquared <= maxDistanceToConsiderVertexAsSameSquared)
-                {
-                    findList.Add(vertices[i]);
-                }
-            }
         }
 
         public void Sort()
@@ -215,42 +124,24 @@ namespace MatterHackers.PolygonMesh
             }
             else
             {
-                int index = vertices.BinarySearch(vertexToRemove, vertexSorter);
-                if (index < 0)
+                int index = IndexOf(vertexToRemove);
+                if (index != -1)
                 {
-                    throw new Exception("This vertex is not in this collection.");
+                    vertices.RemoveAt(index);
                 }
-
-                // we have to get back to the first vertex at this position
-                while (index > 0 && vertices[index-1].Position == vertexToRemove.Position)
-                {
-                    index--;
-                }
-
-                while (index < vertices.Count && vertices[index].Position == vertexToRemove.Position)
-                {
-                    if (vertices[index] == vertexToRemove)
-                    {
-                        vertices.RemoveAt(index);
-                        return;
-                    }
-                    index++;
-                }
-
-                throw new Exception("This vertex is not in this collection.");
             }
         }
 
-        public void Add(Vertex vertexToAdd, bool willSortLater = false)
+        public void Add(Vertex vertexToAdd, SortOption sortOption = SortOption.SortNow)
         {
-            if (willSortLater)
+            if (sortOption == SortOption.WillSortLater)
             {
                 vertices.Add(vertexToAdd);
                 isSorted = false;
             }
             else
             {
-                int index = vertices.BinarySearch(vertexToAdd, vertexSorter);
+                int index = IndexOf(vertexToAdd);
                 if (index < 0)
                 {
                     index = ~index;
@@ -261,9 +152,39 @@ namespace MatterHackers.PolygonMesh
 
         public int IndexOf(Vertex vertexToLookFor)
         {
-            if(IsSorted)
+            if (IsSorted)
             {
                 int index = vertices.BinarySearch(vertexToLookFor, vertexSorter);
+                if (index < 0)
+                {
+                    return index;
+                }
+
+                // we have to get back to the first vertex at this position
+                while (index > 0 && vertexSorter.Compare(vertices[index - 1], vertexToLookFor) == 0)
+                {
+                    index--;
+                }
+
+                bool found = false;
+                while (!found
+                    && index < vertices.Count
+                    && vertexSorter.Compare(vertices[index], vertexToLookFor) == 0)
+                {
+                    if (vertices[index] == vertexToLookFor)
+                    {
+                        found = true;
+                        break;
+                    }
+                    index++;
+                }
+
+                if (!found)
+                {
+                    // this is the insertion position
+                    return index;
+                }
+
 #if DEBUG
                 int indexCheck = vertices.IndexOf(vertexToLookFor);
                 if (index != indexCheck)
@@ -271,6 +192,7 @@ namespace MatterHackers.PolygonMesh
                     throw new Exception("Bad index from sort");
                 }
 #endif
+
                 return index;
             }
             else
@@ -286,7 +208,7 @@ namespace MatterHackers.PolygonMesh
                 throw new Exception("You can't Find a vertex in an unsorted VertexCollection. Sort it first (or add the vertexes without preventing sorting).");
             }
 
-            int index = vertices.BinarySearch(vertexToLookFor, vertexSorter);
+            int index = IndexOf(vertexToLookFor);
             if (index < 0)
             {
                 return false;
@@ -302,7 +224,7 @@ namespace MatterHackers.PolygonMesh
                 throw new Exception("You can't Find a vertex in an unsorted VertexCollection. Sort it first (or add the vertexes without preventing sorting).");
             }
 
-            int index = vertices.BinarySearch(vertexToLookFor, vertexSorter);
+            int index = IndexOf(vertexToLookFor);
             if (index < 0)
             {
                 return false;

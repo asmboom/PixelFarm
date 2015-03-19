@@ -23,6 +23,7 @@ using System.Collections.ObjectModel;
 
 using MatterHackers.Agg.Image;
 using MatterHackers.Agg.Transform;
+using MatterHackers.Agg.VertexSource;
 using MatterHackers.VectorMath;
 
 namespace MatterHackers.Agg.UI
@@ -36,29 +37,29 @@ namespace MatterHackers.Agg.UI
     }
 
     [Flags]
-    public enum HAnchor 
+    public enum HAnchor
     {
         None = 0,
-        ParentLeft = 1, 
-        ParentCenter = 2, 
+        ParentLeft = 1,
+        ParentCenter = 2,
         ParentRight = 4,
         FitToChildren = 8,
-        ParentLeftRight = ParentLeft | ParentRight, 
-        ParentLeftCenter = ParentLeft | ParentCenter, 
+        ParentLeftRight = ParentLeft | ParentRight,
+        ParentLeftCenter = ParentLeft | ParentCenter,
         ParentCenterRight = ParentCenter | ParentRight,
         Max_FitToChildren_ParentWidth = FitToChildren | ParentLeftRight,
     };
 
     [Flags]
-    public enum VAnchor 
+    public enum VAnchor
     {
-        None = 0, 
-        ParentBottom = 1, 
-        ParentCenter = 2, 
+        None = 0,
+        ParentBottom = 1,
+        ParentCenter = 2,
         ParentTop = 4,
         FitToChildren = 8,
-        ParentBottomTop = ParentBottom | ParentTop, 
-        ParentBottomCenter = ParentBottom | ParentCenter, 
+        ParentBottomTop = ParentBottom | ParentTop,
+        ParentBottomCenter = ParentBottom | ParentCenter,
         ParentCenterTop = ParentCenter | ParentTop,
         Max_FitToChildren_ParentHeight = FitToChildren | ParentBottomTop,
     };
@@ -67,8 +68,13 @@ namespace MatterHackers.Agg.UI
 
     public enum UnderMouseState { NotUnderMouse, UnderMouseNotFirst, FirstUnderMouse };
 
+    [DebuggerDisplay("Bounds = {LocalBounds}")]
     public class GuiWidget
     {
+        static bool debugShowSize = false;
+
+        ScreenClipping screenClipping;
+
         // this should probably some type of dirty rects with the current invalid set stored.
         bool isCurrentlyInvalid = true;
 
@@ -80,7 +86,7 @@ namespace MatterHackers.Agg.UI
         bool debugShowBounds = false;
         bool widgetHasBeenClosed = false;
         protected bool WidgetHasBeenClosed { get { return widgetHasBeenClosed; } }
-        public bool DebugShowBounds 
+        public bool DebugShowBounds
         {
             get
             {
@@ -92,7 +98,7 @@ namespace MatterHackers.Agg.UI
                     }
                 }
 
-                return debugShowBounds; 
+                return debugShowBounds;
             }
 
             set
@@ -122,7 +128,7 @@ namespace MatterHackers.Agg.UI
         }
 
         bool enforceIntegerBounds = DefaultEnforceIntegerBounds;
-        public bool EnforceIntegerBounds 
+        public bool EnforceIntegerBounds
         {
             get { return enforceIntegerBounds; }
 
@@ -140,10 +146,10 @@ namespace MatterHackers.Agg.UI
         private bool enabled = true;
 
         bool selectable = true;
-        public bool Selectable 
+        public bool Selectable
         {
-            get {return selectable; }
-            set { selectable = value; } 
+            get { return selectable; }
+            set { selectable = value; }
         }
 
         enum MouseCapturedState { NotCaptured, ChildHasMouseCaptured, ThisHasMouseCaptured };
@@ -153,7 +159,7 @@ namespace MatterHackers.Agg.UI
         public virtual int TabIndex { get; set; }
 
         RGBA_Bytes backgroundColor = new RGBA_Bytes();
-        public RGBA_Bytes BackgroundColor 
+        public RGBA_Bytes BackgroundColor
         {
             get { return backgroundColor; }
             set
@@ -171,7 +177,7 @@ namespace MatterHackers.Agg.UI
         /// <summary>
         /// The space between the Widget and it's contents (the inside border).
         /// </summary>
-        public virtual BorderDouble Padding 
+        public virtual BorderDouble Padding
         {
             get { return padding; }
             set
@@ -227,7 +233,9 @@ namespace MatterHackers.Agg.UI
         [ConditionalAttribute("DEBUG")]
         public static void ThrowExceptionInDebug(string description)
         {
-            throw new Exception(description);
+			#if DEBUG
+			throw new Exception(description);
+			#endif
         }
 
         public virtual void OnMarginChanged()
@@ -243,7 +251,7 @@ namespace MatterHackers.Agg.UI
             return (HAnchor & testFlags) == testFlags;
         }
 
-        public bool HAnchorIsFloating 
+        public bool HAnchorIsFloating
         {
             get
             {
@@ -373,8 +381,10 @@ namespace MatterHackers.Agg.UI
 
         private int layoutSuspendCount;
         public event EventHandler Layout;
-        public event EventHandler Draw;
-    
+        // the event args will be a DrawEventArgs
+        public event DrawEventHandler DrawBefore;
+        public event DrawEventHandler DrawAfter;
+
         public event KeyPressEventHandler KeyPressed;
 
         public event EventHandler Invalidated;
@@ -405,8 +415,8 @@ namespace MatterHackers.Agg.UI
         public event MouseEventHandler MouseWheel;
         public event MouseEventHandler MouseMove;
 
-		public delegate void FlingEventHandler(object sender, FlingEventArgs eventArgs);
-		public event FlingEventHandler GestureFling;
+        public delegate void FlingEventHandler(object sender, FlingEventArgs eventArgs);
+        public event FlingEventHandler GestureFling;
 
         /// <summary>
         /// The mouse has entered the bounds of this widget.  It may also be over a child.
@@ -431,7 +441,7 @@ namespace MatterHackers.Agg.UI
         public event EventHandler BoundsChanged;
 
         public event EventHandler MarginChanged;
-        
+
         public event EventHandler PaddingChanged;
 
         public event EventHandler MinimumSizeChanged;
@@ -457,6 +467,7 @@ namespace MatterHackers.Agg.UI
         public GuiWidget(double width, double height, SizeLimitsToSet sizeLimits = SizeLimitsToSet.Minimum)
             : this(HAnchor.None, VAnchor.None)
         {
+            screenClipping = new ScreenClipping(this);
             if ((sizeLimits & SizeLimitsToSet.Minimum) == SizeLimitsToSet.Minimum)
             {
                 MinimumSize = new Vector2(width, height);
@@ -470,6 +481,7 @@ namespace MatterHackers.Agg.UI
 
         public GuiWidget(HAnchor hAnchor = HAnchor.None, VAnchor vAnchor = VAnchor.None)
         {
+            screenClipping = new ScreenClipping(this);
             children.CollectionChanged += children_CollectionChanged;
             LayoutEngine = new LayoutEngineSimpleAlign();
             HAnchor = hAnchor;
@@ -489,6 +501,23 @@ namespace MatterHackers.Agg.UI
             get
             {
                 return children;
+            }
+        }
+
+        public Affine ParentToChildTransform
+        {
+            get
+            {
+                return parentToChildTransform;
+            }
+
+            set
+            {
+                //if (parentToChildTransform != value)
+                {
+                    parentToChildTransform = value;
+                    screenClipping.MarkRecalculate();
+                }
             }
         }
 
@@ -548,7 +577,7 @@ namespace MatterHackers.Agg.UI
             }
         }
 
-        public bool DoubleBuffer 
+        public bool DoubleBuffer
         {
             get
             {
@@ -649,7 +678,7 @@ namespace MatterHackers.Agg.UI
                         ThrowExceptionInDebug("These have to be 0 or greater.");
                     }
                     maximumSize = value;
-                    
+
                     minimumSize.x = Math.Min(minimumSize.x, maximumSize.x);
                     minimumSize.y = Math.Min(minimumSize.y, maximumSize.y);
                 }
@@ -675,6 +704,7 @@ namespace MatterHackers.Agg.UI
 
                 if (tempLocalToParentTransform.tx != value.x || tempLocalToParentTransform.ty != value.y)
                 {
+                    screenClipping.MarkRecalculate();
                     tempLocalToParentTransform.tx = value.x;
                     tempLocalToParentTransform.ty = value.y;
                     ParentToChildTransform = tempLocalToParentTransform;
@@ -740,7 +770,7 @@ namespace MatterHackers.Agg.UI
                 {
                     value.Top = value.Bottom + MaximumSize.y;
                 }
-                
+
                 if (EnforceIntegerBounds)
                 {
                     value.Left = Math.Floor(value.Left);
@@ -772,6 +802,8 @@ namespace MatterHackers.Agg.UI
                     {
                         AllocateBackBuffer();
                     }
+
+                    screenClipping.MarkRecalculate();
                 }
             }
         }
@@ -980,7 +1012,7 @@ namespace MatterHackers.Agg.UI
 
         public void SetBoundsRelativeToParent(RectangleInt newBounds)
         {
-            RectangleDouble bounds =  new RectangleDouble(newBounds.Left, newBounds.Bottom, newBounds.Right, newBounds.Top);
+            RectangleDouble bounds = new RectangleDouble(newBounds.Left, newBounds.Bottom, newBounds.Right, newBounds.Top);
 
             BoundsRelativeToParent = bounds;
         }
@@ -1012,7 +1044,7 @@ namespace MatterHackers.Agg.UI
                     }
 
                     OnVisibleChanged(null);
-                    
+
                     OnLayout(new LayoutEventArgs(this, null, PropertyCausingLayout.Visible));
                     if (this.Parent != null)
                     {
@@ -1020,6 +1052,7 @@ namespace MatterHackers.Agg.UI
                     }
 
                     Invalidate();
+                    screenClipping.MarkRecalculate();
                 }
             }
         }
@@ -1364,7 +1397,7 @@ namespace MatterHackers.Agg.UI
                     widgetNeedingFocus = widgetNeedingFocus.Parent;
                 }
 
-                GuiWidget currentWithFocus = allWidgetsThatWillContainFocus[allWidgetsThatWillContainFocus.Count-1];
+                GuiWidget currentWithFocus = allWidgetsThatWillContainFocus[allWidgetsThatWillContainFocus.Count - 1];
                 while (currentWithFocus != null)
                 {
                     allWidgetsThatCurrentlyHaveFocus.Add(currentWithFocus);
@@ -1408,7 +1441,7 @@ namespace MatterHackers.Agg.UI
                 } while (curWidget != null);
 
                 // finally call any delegates
-                OnFocus(null);
+                OnGotFocus(null);
 
                 return true;
             }
@@ -1435,19 +1468,11 @@ namespace MatterHackers.Agg.UI
             }
         }
 
-        public virtual void OnFocus(EventArgs e)
-        {
-            if (GotFocus != null)
-            {
-                GotFocus(this, e);
-            }
-        }
-
         public bool CanSelect
         {
-            get 
+            get
             {
-                if(Selectable && Parent != null && AllParentsVisibleAndEnabled())
+                if (Selectable && Parent != null && AllParentsVisibleAndEnabled())
                 {
                     return true;
                 }
@@ -1637,11 +1662,28 @@ namespace MatterHackers.Agg.UI
         public virtual void OnDraw(Graphics2D graphics2D)
         {
             DrawCount++;
+
+            if (DrawBefore != null)
+            {
+                DrawBefore(this, new DrawEventArgs(graphics2D));
+            }
+
             for (int i = 0; i < Children.Count; i++)
             {
                 GuiWidget child = Children[i];
                 if (child.Visible)
                 {
+                    if (child.DebugShowBounds)
+                    {
+                        // draw the margin
+                        BorderDouble invertedMargin = child.Margin;
+                        invertedMargin.Left = -invertedMargin.Left;
+                        invertedMargin.Bottom = -invertedMargin.Bottom;
+                        invertedMargin.Right = -invertedMargin.Right;
+                        invertedMargin.Top = -invertedMargin.Top;
+                        DrawBorderBounds(graphics2D, child.BoundsRelativeToParent, invertedMargin, new RGBA_Bytes(RGBA_Bytes.Red, 128));
+                    }
+
                     RectangleDouble oldClippingRect = graphics2D.GetClippingRect();
                     graphics2D.PushTransform();
                     {
@@ -1710,49 +1752,127 @@ namespace MatterHackers.Agg.UI
                 }
             }
 
-            if (Draw != null)
+            if (DrawAfter != null)
             {
-                Draw(this, new DrawEventArgs(graphics2D));
+                DrawAfter(this, new DrawEventArgs(graphics2D));
             }
 
             if (DebugShowBounds)
             {
+                // draw the padding
+                DrawBorderBounds(graphics2D, LocalBounds, Padding, new RGBA_Bytes(RGBA_Bytes.Cyan, 128));
+
+                // show the bounds and inside with an x
                 graphics2D.Line(LocalBounds.Left, LocalBounds.Bottom, LocalBounds.Right, LocalBounds.Top, RGBA_Bytes.Green);
                 graphics2D.Line(LocalBounds.Left, LocalBounds.Top, LocalBounds.Right, LocalBounds.Bottom, RGBA_Bytes.Green);
                 graphics2D.Rectangle(LocalBounds, RGBA_Bytes.Red);
             }
-            if (showSize)
+            if (debugShowSize)
             {
                 graphics2D.DrawString(string.Format("{4} {0}, {1} : {2}, {3}", (int)MinimumSize.x, (int)MinimumSize.y, (int)LocalBounds.Width, (int)LocalBounds.Height, Name),
                     Width / 2, Math.Max(Height - 16, Height / 2 - 16 * graphics2D.TransformStackCount), color: RGBA_Bytes.Magenta, justification: Font.Justification.Center);
             }
         }
 
-        static bool showSize = false;
-
-        protected virtual bool CurrentScreenClipping(out RectangleDouble screenClipping)
+        private static void DrawBorderBounds(Graphics2D graphics2D, RectangleDouble bounds, BorderDouble border, RGBA_Bytes color)
         {
-            screenClipping = TransformRectangleToScreenSpace(LocalBounds);
-
-            if (Parent != null)
+            if (border.Width != 0
+                || border.Height != 0)
             {
-                RectangleDouble screenParentClipping;
-                if (!Parent.CurrentScreenClipping(out screenParentClipping))
-                {
-                    // the parent is completely clipped away, so this is too.
-                    return false;
-                }
+                PathStorage borderPath = new PathStorage();
+                borderPath.MoveTo(bounds.Left, bounds.Bottom);
+                borderPath.LineTo(bounds.Left, bounds.Top);
+                borderPath.LineTo(bounds.Right, bounds.Top);
+                borderPath.LineTo(bounds.Right, bounds.Bottom);
+                borderPath.LineTo(bounds.Left, bounds.Bottom);
 
-                RectangleDouble intersectionRect = new RectangleDouble();
-                if (!intersectionRect.IntersectRectangles(screenClipping, screenParentClipping))
+                borderPath.MoveTo(bounds.Left + border.Left, bounds.Bottom + border.Bottom);
+                borderPath.LineTo(bounds.Right - border.Right, bounds.Bottom + border.Bottom);
+                borderPath.LineTo(bounds.Right - border.Right, bounds.Top - border.Top);
+                borderPath.LineTo(bounds.Left + border.Left, bounds.Top - border.Top);
+                borderPath.LineTo(bounds.Left + border.Left, bounds.Bottom + border.Bottom);
+                graphics2D.Render(borderPath, color);
+            }
+        }
+
+        internal class ScreenClipping
+        {
+            GuiWidget attachedTo;
+            internal bool needRebuild = true;
+            internal bool NeedRebuild
+            {
+                get { return needRebuild; }
+                set
                 {
-                    // this rect is clipped away by the parent rect so return false.
-                    return false;
+                    needRebuild = value;
                 }
-                screenClipping = intersectionRect;
             }
 
-            return true;
+            internal void MarkRecalculate()
+            {
+                GuiWidget nextParent = attachedTo.Parent;
+                while (nextParent != null)
+                {
+                    nextParent.screenClipping.NeedRebuild = true;
+                    nextParent = nextParent.Parent;
+                }
+
+                MarkChildrenRecaculate();
+            }
+
+            void MarkChildrenRecaculate()
+            {
+                NeedRebuild = true;
+                foreach (GuiWidget child in attachedTo.Children)
+                {
+                    child.screenClipping.MarkChildrenRecaculate();
+                }
+            }
+
+            internal bool visibleAfterClipping = true;
+            internal RectangleDouble screenClippingRect;
+
+            internal ScreenClipping(GuiWidget attachedTo)
+            {
+                this.attachedTo = attachedTo;
+            }
+        }
+
+        protected virtual bool CurrentScreenClipping(out RectangleDouble screenClippingRect)
+        {
+            if (screenClipping.NeedRebuild)
+            {
+                DrawCount++;
+                screenClipping.screenClippingRect = TransformToScreenSpace(LocalBounds);
+
+                if (Parent != null)
+                {
+                    RectangleDouble screenParentClipping;
+                    if (Parent.CurrentScreenClipping(out screenParentClipping))
+                    {
+                        RectangleDouble intersectionRect = new RectangleDouble();
+                        if (intersectionRect.IntersectRectangles(screenClipping.screenClippingRect, screenParentClipping))
+                        {
+                            screenClipping.screenClippingRect = intersectionRect;
+                            screenClipping.visibleAfterClipping = true;
+                        }
+                        else
+                        {
+                            // this rect is clipped away by the parent rect so return false.
+                            screenClipping.visibleAfterClipping = false;
+                        }
+                    }
+                    else
+                    {
+                        // the parent is completely clipped away, so this is too.
+                        screenClipping.visibleAfterClipping = false;
+                    }
+                }
+                screenClipping.NeedRebuild = false;
+            }
+
+            screenClippingRect = screenClipping.screenClippingRect;
+            return screenClipping.visibleAfterClipping;
         }
 
         public virtual void OnClosing(out bool cancelClose)
@@ -1784,9 +1904,9 @@ namespace MatterHackers.Agg.UI
 
         public void CloseOnIdle()
         {
-            UiThread.RunOnIdle((state) => 
+            UiThread.RunOnIdle((state) =>
             {
-                Close(); 
+                Close();
             });
         }
 
@@ -1803,7 +1923,7 @@ namespace MatterHackers.Agg.UI
             if (!widgetHasBeenClosed)
             {
                 widgetHasBeenClosed = true;
-                for(int i=Children.Count-1; i>=0; i--)
+                for (int i = Children.Count - 1; i >= 0; i--)
                 {
                     GuiWidget child = Children[i];
                     Children.RemoveAt(i);
@@ -1829,7 +1949,46 @@ namespace MatterHackers.Agg.UI
             }
         }
 
-        public Vector2 TransformVector2ToScreenSpace(Vector2 vectorToTransform)
+        public Vector2 TransformFromParentSpace(GuiWidget parentToGetRelativeTo, Vector2 position)
+        {
+            GuiWidget parent = Parent;
+            while (parent != null
+                && parent != parentToGetRelativeTo)
+            {
+                position -= new Vector2(parent.BoundsRelativeToParent.Left, parent.BoundsRelativeToParent.Bottom);
+                parent = parent.Parent;
+            }
+
+            return position;
+        }
+
+        public Vector2 TransformToParentSpace(GuiWidget parentToGetRelativeTo, Vector2 position)
+        {
+            GuiWidget parent = Parent;
+            while (parent != null
+                && parent != parentToGetRelativeTo)
+            {
+                position += new Vector2(parent.BoundsRelativeToParent.Left, parent.BoundsRelativeToParent.Bottom);
+                parent = parent.Parent;
+            }
+
+            return position;
+        }
+
+        public RectangleDouble TransformToParentSpace(GuiWidget parentToGetRelativeTo, RectangleDouble rectangleToTransform)
+        {
+            GuiWidget parent = Parent;
+            while (parent != null
+                && parent != parentToGetRelativeTo)
+            {
+                rectangleToTransform.Offset(parent.OriginRelativeParent);
+                parent = parent.Parent;
+            }
+
+            return rectangleToTransform;
+        }
+
+        public Vector2 TransformToScreenSpace(Vector2 vectorToTransform)
         {
             GuiWidget prevGUIWidget = this;
             while (prevGUIWidget != null)
@@ -1841,7 +2000,7 @@ namespace MatterHackers.Agg.UI
             return vectorToTransform;
         }
 
-        public RectangleDouble TransformRectangleToScreenSpace(RectangleDouble rectangleToTransform)
+        public RectangleDouble TransformToScreenSpace(RectangleDouble rectangleToTransform)
         {
             GuiWidget prevGUIWidget = this;
             while (prevGUIWidget != null)
@@ -1895,12 +2054,12 @@ namespace MatterHackers.Agg.UI
 
             underMouseState = UI.UnderMouseState.NotUnderMouse;
 
-            if(needToCallLeave)
+            if (needToCallLeave)
             {
                 OnMouseLeave(mouseEvent);
             }
 
-            if(needToCallLeaveBounds)
+            if (needToCallLeaveBounds)
             {
                 OnMouseLeaveBounds(mouseEvent);
             }
@@ -1915,36 +2074,36 @@ namespace MatterHackers.Agg.UI
             underMouseState = UI.UnderMouseState.NotUnderMouse;
         }
 
-		public virtual void OnGestureFling(FlingEventArgs flingEvent)
-		{
-			if (PositionWithinLocalBounds(flingEvent.X, flingEvent.Y))
-			{
-				//bool childHasAcceptedThisEvent = false;
-				for (int i = Children.Count - 1; i >= 0; i--)
-				{
-					GuiWidget child = Children[i];
-					if (child.Visible & child.Enabled)
-					{
-						double childX = flingEvent.X;
-						double childY = flingEvent.Y;
-						child.ParentToChildTransform.inverse_transform(ref childX, ref childY);
-						FlingEventArgs childFlingEvent = new FlingEventArgs(childX, childY, flingEvent.Direction);
+        public virtual void OnGestureFling(FlingEventArgs flingEvent)
+        {
+            if (PositionWithinLocalBounds(flingEvent.X, flingEvent.Y))
+            {
+                //bool childHasAcceptedThisEvent = false;
+                for (int i = Children.Count - 1; i >= 0; i--)
+                {
+                    GuiWidget child = Children[i];
+                    if (child.Visible & child.Enabled)
+                    {
+                        double childX = flingEvent.X;
+                        double childY = flingEvent.Y;
+                        child.ParentToChildTransform.inverse_transform(ref childX, ref childY);
+                        FlingEventArgs childFlingEvent = new FlingEventArgs(childX, childY, flingEvent.Direction);
 
 
-						if (child.PositionWithinLocalBounds(childFlingEvent.X, childFlingEvent.Y))
-						{
-							// recurse in
-							child.OnGestureFling(childFlingEvent);
-						}
-					}
-				}
+                        if (child.PositionWithinLocalBounds(childFlingEvent.X, childFlingEvent.Y))
+                        {
+                            // recurse in
+                            child.OnGestureFling(childFlingEvent);
+                        }
+                    }
+                }
 
-				if (GestureFling != null)
-				{
-					GestureFling(this, flingEvent);
-				}
-			}
-		}
+                if (GestureFling != null)
+                {
+                    GestureFling(this, flingEvent);
+                }
+            }
+        }
 
         public virtual void OnMouseDown(MouseEventArgs mouseEvent)
         {
@@ -2062,6 +2221,54 @@ namespace MatterHackers.Agg.UI
                 OnMouseMoveWhenCaptured(mouseEvent);
             }
         }
+
+		public void ValidateMouseCaptureRecursive(GuiWidget lastUpdatedParent = null)
+		{
+			int countOfChildernThatThinkTheyHaveTheMouseCaptured = 0;
+			foreach (GuiWidget child in Children)
+			{
+				if (child.mouseCapturedState != MouseCapturedState.NotCaptured)
+				{
+					// keep a count
+					countOfChildernThatThinkTheyHaveTheMouseCaptured++;
+
+					// validate that every parent is marked as containing mouse capture
+					GuiWidget parent = this.Parent;
+					while (parent != null 
+						&& parent != lastUpdatedParent
+						&& this != lastUpdatedParent)
+					{
+						if (parent.mouseCapturedState != MouseCapturedState.ChildHasMouseCaptured)
+						{
+							ThrowExceptionInDebug("All parents must know a child has the mouse captured.");
+						}
+						parent = parent.Parent;
+					}
+				}
+				child.ValidateMouseCaptureRecursive(lastUpdatedParent);
+			}
+
+			switch (mouseCapturedState)
+			{
+				case MouseCapturedState.NotCaptured:
+				case MouseCapturedState.ThisHasMouseCaptured:
+					if (countOfChildernThatThinkTheyHaveTheMouseCaptured != 0)
+					{
+						ThrowExceptionInDebug("No child should have the mouse captured.");
+					}
+					break;
+
+				case MouseCapturedState.ChildHasMouseCaptured:
+					if (countOfChildernThatThinkTheyHaveTheMouseCaptured < 1 || countOfChildernThatThinkTheyHaveTheMouseCaptured > 1)
+					{
+						ThrowExceptionInDebug("One and only one child should ever have the mouse captured.");
+					}
+					break;
+
+				default:
+					throw new NotImplementedException();
+			}
+		}
 
         private void OnMouseMoveWhenCaptured(MouseEventArgs mouseEvent)
         {
@@ -2220,7 +2427,7 @@ namespace MatterHackers.Agg.UI
         int childrenLockedInMouseUpCount = 0;
         public virtual void OnMouseUp(MouseEventArgs mouseEvent)
         {
-            if (childrenLockedInMouseUpCount != 0) 
+            if (childrenLockedInMouseUpCount != 0)
             {
                 ThrowExceptionInDebug("This should not be locked.");
             }
@@ -2567,20 +2774,5 @@ namespace MatterHackers.Agg.UI
                 KeyUp(this, keyEvent);
             }
         }
-
-        public Affine ParentToChildTransform
-        {
-            get
-            {
-                return parentToChildTransform;
-            }
-
-            set
-            {
-                parentToChildTransform = value;
-            }
-        }
-
-        public double scale() { return ParentToChildTransform.GetScale(); }
     }
 }

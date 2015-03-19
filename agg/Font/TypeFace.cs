@@ -17,9 +17,8 @@
 //----------------------------------------------------------------------------
 using System;
 using System.IO;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Text.RegularExpressions;
+using System.Collections.Generic;
 
 using MatterHackers.Agg.Transform;
 using MatterHackers.Agg.VertexSource;
@@ -169,6 +168,14 @@ namespace MatterHackers.Agg.Font
             return GetIntValue(source, name, out outValue, ref startIndex);
         }
 
+        public static TypeFace LoadFrom(string content)
+        {
+            TypeFace fontUnderConstruction = new TypeFace();
+            fontUnderConstruction.ReadSVG(content);
+
+            return fontUnderConstruction;
+        }
+
         public static TypeFace LoadSVG(String filename)
         {
             TypeFace fontUnderConstruction = new TypeFace();
@@ -184,17 +191,6 @@ namespace MatterHackers.Agg.Font
             fontUnderConstruction.ReadSVG(svgContent);
 
             return fontUnderConstruction;
-        }
-
-        static Regex numberRegex = new Regex(@"[-+]?[0-9]*\.?[0-9]+");
-        static double GetNextNumber(String source, ref int startIndex)
-        {
-            Match numberMatch = numberRegex.Match(source, startIndex);
-            String returnString = numberMatch.Value;
-            startIndex = numberMatch.Index + numberMatch.Length;
-            double returnVal;
-            double.TryParse(returnString, NumberStyles.Number, CultureInfo.InvariantCulture, out returnVal);
-            return returnVal;
         }
 
         Glyph CreateGlyphFromSVGGlyphData(String SVGGlyphData)
@@ -253,8 +249,8 @@ namespace MatterHackers.Agg.Font
                         // svg fonts are stored cw and agg expects its shapes to be ccw.  cw shapes are holes.
                         // so we store the position of the start of this polygon so we can flip it when we colse it.
                         polyStartVertexSourceIndex = newGlyph.glyphData.size();
-                        curXY.x = GetNextNumber(dString, ref parseIndex);
-                        curXY.y = GetNextNumber(dString, ref parseIndex);
+						curXY.x = agg_basics.ParseDouble(dString, ref parseIndex);
+						curXY.y = agg_basics.ParseDouble(dString, ref parseIndex);
 
                         newGlyph.glyphData.MoveTo(curXY.x, curXY.y);
                         polyStart = curXY;
@@ -264,7 +260,7 @@ namespace MatterHackers.Agg.Font
                     case 'V':
                         parseIndex++;
                         curXY.x = lastXY.x;
-                        curXY.y = GetNextNumber(dString, ref parseIndex);
+						curXY.y = agg_basics.ParseDouble(dString, ref parseIndex);
                         if (command == 'v')
                         {
                             curXY.y += lastXY.y;
@@ -277,7 +273,7 @@ namespace MatterHackers.Agg.Font
                     case 'H':
                         parseIndex++;
                         curXY.y = lastXY.y;
-                        curXY.x = GetNextNumber(dString, ref parseIndex);
+						curXY.x = agg_basics.ParseDouble(dString, ref parseIndex);
                         if (command == 'h')
                         {
                             curXY.x += lastXY.x;
@@ -289,8 +285,8 @@ namespace MatterHackers.Agg.Font
                     case 'l':
                     case 'L':
                         parseIndex++;
-                        curXY.x = GetNextNumber(dString, ref parseIndex);
-                        curXY.y = GetNextNumber(dString, ref parseIndex);
+						curXY.x = agg_basics.ParseDouble(dString, ref parseIndex);
+						curXY.y = agg_basics.ParseDouble(dString, ref parseIndex);
                         if (command == 'l')
                         {
                             curXY += lastXY;
@@ -304,10 +300,10 @@ namespace MatterHackers.Agg.Font
                         {
                             parseIndex++;
                             Vector2 controlPoint;
-                            controlPoint.x = GetNextNumber(dString, ref parseIndex);
-                            controlPoint.y = GetNextNumber(dString, ref parseIndex);
-                            curXY.x = GetNextNumber(dString, ref parseIndex);
-                            curXY.y = GetNextNumber(dString, ref parseIndex);
+							controlPoint.x = agg_basics.ParseDouble(dString, ref parseIndex);
+							controlPoint.y = agg_basics.ParseDouble(dString, ref parseIndex);
+							curXY.x = agg_basics.ParseDouble(dString, ref parseIndex);
+							curXY.y = agg_basics.ParseDouble(dString, ref parseIndex);
                             if (command == 'q')
                             {
                                 controlPoint += lastXY;
@@ -321,8 +317,8 @@ namespace MatterHackers.Agg.Font
                     case 't':
                     case 'T':
                         parseIndex++;
-                        curXY.x = GetNextNumber(dString, ref parseIndex);
-                        curXY.y = GetNextNumber(dString, ref parseIndex);
+						curXY.x = agg_basics.ParseDouble(dString, ref parseIndex);
+						curXY.y = agg_basics.ParseDouble(dString, ref parseIndex);
                         if (command == 't')
                         {
                             curXY += lastXY;
