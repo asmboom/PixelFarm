@@ -27,7 +27,7 @@ namespace PixelFarm.Agg
 {
     public sealed class Stroke
     {
-        VertexStore vxs = new VertexStore();
+
         StrokeGenerator strokeGen;
         public Stroke(double inWidth)
         {
@@ -84,7 +84,8 @@ namespace PixelFarm.Agg
         {
 
             StrokeGenerator strkgen = strokeGen;
-            vxs.Clear();
+            VertexStore vxs = new VertexStore();
+
             int j = sourceVxs.Count;
             double x, y;
 
