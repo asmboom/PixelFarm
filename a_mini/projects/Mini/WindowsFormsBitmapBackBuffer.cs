@@ -115,9 +115,9 @@ namespace Mini
                  bufferBmp.Width,
                  bufferBmp.Height,
                  bufferDc, 0, 0, SRCCOPY);
-
+            //------------------------------------------------
             SelectObject(bufferDc, hOldObject);
-            //DeleteObject(hBitmap); 
+            DeleteObject(hBitmap);//if not delete then mem leak***
             bufferGfx.ReleaseHdc(bufferDc);
             dest.ReleaseHdc(displayHdc);
         }

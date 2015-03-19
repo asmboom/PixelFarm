@@ -30,8 +30,7 @@ namespace PixelFarm.Agg.SimplePainter
         {
             //load font ?
             font1 = NativeFontStore.LoadFont(fontfile, 72);
-            font2 = NativeFontStore.LoadFont(fontfile, 10);
-
+            font2 = NativeFontStore.LoadFont(fontfile, 10); 
         }
         public override void Draw(Graphics2D g)
         {

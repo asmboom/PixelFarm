@@ -31,6 +31,7 @@ namespace PixelFarm.Agg.SimplePainter
             //1.
             // clear the image to white
             CanvasPainter p = new CanvasPainter(g);
+           
             p.Clear(ColorRGBA.White);
             // draw a circle  
             p.FillColor = ColorRGBA.Blue;
@@ -45,7 +46,7 @@ namespace PixelFarm.Agg.SimplePainter
             p.Rectangle(60, 260, 200, 280, ColorRGBA.Magenta);
 
 
-           
+
 
             p.DrawString("A Simple Example", 300, 400);
 
