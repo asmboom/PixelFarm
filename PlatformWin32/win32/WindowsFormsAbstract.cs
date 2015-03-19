@@ -34,7 +34,7 @@ namespace MatterHackers.Agg.UI
 {
     public abstract class WindowsFormsAbstract : Form
     {
-        // These dll imports are so that we can set the PROCESS_CALLBACK_FILTER_ENABLED to allow us to get exceptions back into our app durring system calls such as on paint.
+        // These dll imports are so that we can set the PROCESS_CALLBACK_FILTER_ENABLED to allow us to get exceptions back into our app during system calls such as on paint.
         //[DllImport("Kernel32.dll", CallingConvention = CallingConvention.Cdecl)]
         [DllImport("Kernel32.dll", CallingConvention = CallingConvention.StdCall)]
         public static extern bool SetProcessUserModeExceptionPolicy(int dwFlagss);
@@ -175,7 +175,8 @@ namespace MatterHackers.Agg.UI
 
         void CallAppWidgetOnIdle(object sender, ElapsedEventArgs e)
         {
-            if (aggAppWidget != null && !hasBeenClosed)
+            if (aggAppWidget != null 
+                && !hasBeenClosed)
             {
                 if (InvokeRequired)
                 {
@@ -246,6 +247,18 @@ namespace MatterHackers.Agg.UI
             //base.OnPaintBackground(e);
         }
 
+        protected override void OnActivated(EventArgs e)
+        {
+            // focus the first child of the forms window (should be the system window)
+            if (aggAppWidget != null
+                && aggAppWidget.Children.Count > 0
+                && aggAppWidget.Children[0] != null)
+            {
+                aggAppWidget.Children[0].Focus();
+            }
+            base.OnActivated(e);
+        }
+
         protected override void OnResize(EventArgs e)
         {
             aggAppWidget.LocalBounds = new RectangleDouble(0, 0, ClientSize.Width, ClientSize.Height);
@@ -265,17 +278,26 @@ namespace MatterHackers.Agg.UI
             {
                 e.Cancel = true;
             }
-            else if (this == mainForm && !waitingForIdleTimerToStop)
+            else
             {
-                waitingForIdleTimerToStop = true;
-                idleCallBackTimer.Stop();
-                idleCallBackTimer.Elapsed -= CallAppWidgetOnIdle;
-                e.Cancel = true;
-                // We just need to wait for this event to end so we can re-enter the idle loop with the time stoped
-                // If we close with the idle loop timer not stoped we throw and exception.
-                System.Windows.Forms.Timer delayedCloseTimer = new System.Windows.Forms.Timer();
-                delayedCloseTimer.Tick += DoDelayedClose;
-                delayedCloseTimer.Start();
+                if (!hasBeenClosed)
+                {
+                    hasBeenClosed = true;
+                    aggAppWidget.Close();
+                }
+
+                if (this == mainForm && !waitingForIdleTimerToStop)
+                {
+                    waitingForIdleTimerToStop = true;
+                    idleCallBackTimer.Stop();
+                    idleCallBackTimer.Elapsed -= CallAppWidgetOnIdle;
+                    e.Cancel = true;
+                    // We just need to wait for this event to end so we can re-enter the idle loop with the time stoped
+                    // If we close with the idle loop timer not stoped we throw and exception.
+                    System.Windows.Forms.Timer delayedCloseTimer = new System.Windows.Forms.Timer();
+                    delayedCloseTimer.Tick += DoDelayedClose;
+                    delayedCloseTimer.Start();
+                }
             }
 
             base.OnClosing(e);
@@ -285,17 +307,6 @@ namespace MatterHackers.Agg.UI
         {
             ((System.Windows.Forms.Timer)sender).Stop();
             this.Close();
-        }
-
-        protected override void OnClosed(EventArgs e)
-        {
-            if (!hasBeenClosed)
-            {
-                hasBeenClosed = true;
-                aggAppWidget.Close();
-            }
-
-            base.OnClosed(e);
         }
 
         internal virtual void RequestInvalidate(Rectangle windowsRectToInvalidate)

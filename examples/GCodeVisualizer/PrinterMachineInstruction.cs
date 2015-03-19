@@ -38,18 +38,30 @@ namespace MatterHackers.GCodeVisualizer
 {
     public class PrinterMachineInstruction
     {
-        public string Line;
+		public byte[] byteLine;
+		public string Line
+		{
+			get
+			{
+				return Encoding.Default.GetString(byteLine);
+			}
 
-        Vector3 xyzPosition = new Vector3();
-        double ePosition = 0;
-        double feedRate = 0;
+			set
+			{
+				byteLine = Encoding.Default.GetBytes(value);
+			}
+		}
+
+        Vector3Float xyzPosition = new Vector3Float();
+        float ePosition = 0;
+        float feedRate = 0;
 
         public enum MovementTypes { Absolute, Relative };
         // Absolute is the RepRap default
         public MovementTypes movementType = MovementTypes.Absolute;
 
-        public double secondsThisLine;
-        public double secondsToEndFromHere;
+        public float secondsThisLine;
+        public float secondsToEndFromHere;
 
         public PrinterMachineInstruction(string Line)
         {
@@ -71,7 +83,7 @@ namespace MatterHackers.GCodeVisualizer
 
         public Vector3 Position
         {
-            get { return xyzPosition; }
+            get { return new Vector3(xyzPosition); }
         }
 
         public double X
@@ -81,11 +93,11 @@ namespace MatterHackers.GCodeVisualizer
             {
                 if (movementType == MovementTypes.Absolute)
                 {
-                    xyzPosition.x = value;
+                    xyzPosition.x = (float)value;
                 }
                 else
                 {
-                    xyzPosition.x += value;
+                    xyzPosition.x += (float)value;
                 }
             }
         }
@@ -97,11 +109,11 @@ namespace MatterHackers.GCodeVisualizer
             {
                 if (movementType == MovementTypes.Absolute)
                 {
-                    xyzPosition.y = value;
+                    xyzPosition.y = (float)value;
                 }
                 else
                 {
-                    xyzPosition.y += value;
+                    xyzPosition.y += (float)value;
                 }
             }
         }
@@ -113,11 +125,11 @@ namespace MatterHackers.GCodeVisualizer
             {
                 if (movementType == MovementTypes.Absolute)
                 {
-                    xyzPosition.z = value;
+                    xyzPosition.z = (float)value;
                 }
                 else
                 {
-                    xyzPosition.z += value;
+                    xyzPosition.z += (float)value;
                 }
             }
         }
@@ -127,14 +139,14 @@ namespace MatterHackers.GCodeVisualizer
             get { return ePosition; }
             set
             {
-                ePosition = value;
+                ePosition = (float)value;
             }
         }
 
         public double FeedRate
         {
             get { return feedRate; }
-            set { feedRate = value; }
+            set { feedRate = (float)value; }
         }
     }
 }

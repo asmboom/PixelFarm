@@ -817,8 +817,8 @@ namespace MatterHackers.Agg.UI.Tests
 
             // move to just outside both widgets
             container.OnMouseMove(new MouseEventArgs(MouseButtons.Left, 1, 1, 25, 0));
-            Assert.IsTrue(bottomWidget.TransformRectangleToScreenSpace(bottomWidget.LocalBounds).Contains(1, 25) == false);
-            Assert.IsTrue(topWidget.TransformRectangleToScreenSpace(topWidget.LocalBounds).Contains(1, 25) == false);
+            Assert.IsTrue(bottomWidget.TransformToScreenSpace(bottomWidget.LocalBounds).Contains(1, 25) == false);
+            Assert.IsTrue(topWidget.TransformToScreenSpace(topWidget.LocalBounds).Contains(1, 25) == false);
             // clear our states
             bottomGotEnter = bottomGotLeave = bottomGotEnterBounds = bottomGotLeaveBounds = 0;
             topGotEnter = topGotLeave = topGotEnterBounds = topGotLeaveBounds = 0;
@@ -953,9 +953,9 @@ namespace MatterHackers.Agg.UI.Tests
             container.OnMouseUp(new MouseEventArgs(MouseButtons.Left, 1, 1, 1, 0));
             Assert.IsTrue(regionA.MouseCaptured == false);
             Assert.IsTrue(aGotEnter == 0);
-            Assert.IsTrue(aGotLeave == 1, "Durring the mouse up we also happen to be off the widget.  Need to get a mouse leave event.");
+            Assert.IsTrue(aGotLeave == 1, "During the mouse up we also happen to be off the widget.  Need to get a mouse leave event.");
             Assert.IsTrue(aGotEnterBounds == 0);
-            Assert.IsTrue(aGotLeaveBounds == 1, "Durring the mouse up we also happen to be off the widget.  Need to get a mouse leave event.");
+            Assert.IsTrue(aGotLeaveBounds == 1, "During the mouse up we also happen to be off the widget.  Need to get a mouse leave event.");
             Assert.IsTrue(aGotMove == 0);
             Assert.IsTrue(aGotUp == 1, "When we are captured we need to see mouse up messages.");
 

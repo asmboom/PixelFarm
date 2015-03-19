@@ -14,6 +14,7 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 #if !USE_OPENGL
 	internal class ImediateMode
 	{
+        public static byte[] currentColor = new byte[4];
 		BeginMode mode;
 		internal BeginMode Mode
 		{
@@ -21,15 +22,18 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 			set
 			{
 				mode = value;
-				positions3f.Clear();
-				textureCoords2f.Clear();
+                positions3f.Clear();
+                color4b.Clear();
+                textureCoords2f.Clear();
 			}
 		}
 
-		internal VectorPOD<float> positions3f = new VectorPOD<float>();
+		internal int vertexCount;
+        internal VectorPOD<float> positions3f = new VectorPOD<float>();
+        internal VectorPOD<byte> color4b = new VectorPOD<byte>();
 		internal VectorPOD<float> textureCoords2f = new VectorPOD<float>();
 	}
-	#endif
+#endif
 
     public enum FrontFaceDirection
     {
@@ -335,6 +339,11 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 #endif
         }
 
+        public static void Translate(MatterHackers.VectorMath.Vector3 vector)
+        {
+            Translate(vector.x, vector.y, vector.z);
+        }
+
         public static void Translate(double x, double y, double z)
         {
 #if USE_OPENGL
@@ -372,7 +381,12 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 #if USE_OPENGL
             OpenTK.Graphics.OpenGL.GL.Color4(red, green, blue, alpha);
 #else
-			OpenTK.Graphics.ES11.GL.Color4(red, green, blue, alpha);
+            ImediateMode.currentColor[0] = (byte)red;
+            ImediateMode.currentColor[1] = (byte)green;
+            ImediateMode.currentColor[2] = (byte)blue;
+            ImediateMode.currentColor[3] = (byte)alpha;
+
+            OpenTK.Graphics.ES11.GL.Color4(ImediateMode.currentColor[0], ImediateMode.currentColor[1], ImediateMode.currentColor[2], ImediateMode.currentColor[3]);
 #endif
         }
 
@@ -400,15 +414,6 @@ namespace MatterHackers.RenderOpenGl.OpenGl
             OpenTK.Graphics.OpenGL.GL.MultMatrix(m);
 #else
 			OpenTK.Graphics.ES11.GL.MultMatrix(m);
-#endif
-        }
-
-        public static void MultMatrix(double[] m)
-        {
-#if USE_OPENGL
-            OpenTK.Graphics.OpenGL.GL.MultMatrix(m);
-#else
-			throw new NotImplementedException();
 #endif
         }
 
@@ -542,14 +547,42 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 #else
 			switch (currentImediateData.Mode)
 			{
+				case BeginMode.Lines:
+					{
+						GL.EnableClientState(ArrayCap.ColorArray);
+						GL.EnableClientState(ArrayCap.VertexArray);
+
+						float[] v = currentImediateData.positions3f.Array;
+						byte[] c = currentImediateData.color4b.Array;
+						// pin the data, so that GC doesn't move them, while used
+						// by native code
+						unsafe
+						{
+							fixed (float* pv = v)
+							{
+								fixed (byte* pc = c)
+								{
+									GL.ColorPointer(4, ColorPointerType.UnsignedByte, 0, new IntPtr(pc));
+									GL.VertexPointer(currentImediateData.vertexCount, VertexPointerType.Float, 0, new IntPtr(pv));
+									GL.DrawArrays(currentImediateData.Mode, 0, currentImediateData.positions3f.Count / currentImediateData.vertexCount);
+								}
+							}
+						}
+						GL.DisableClientState(ArrayCap.VertexArray);
+						GL.DisableClientState(ArrayCap.ColorArray);
+					}
+					break;
+
 				case BeginMode.TriangleFan:
 				case BeginMode.Triangles:
 				case BeginMode.TriangleStrip:
 					{
-						GL.EnableClientState(ArrayCap.VertexArray);
+                        GL.EnableClientState(ArrayCap.ColorArray);
+                        GL.EnableClientState(ArrayCap.VertexArray);
 						GL.EnableClientState(ArrayCap.TextureCoordArray);
 
 						float[] v = currentImediateData.positions3f.Array;
+                        byte[] c = currentImediateData.color4b.Array;
 						float[] t = currentImediateData.textureCoords2f.Array;
 						// pin the data, so that GC doesn't move them, while used
 						// by native code
@@ -557,13 +590,18 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 						{
 							fixed (float* pv = v, pt = t)
 							{
-								GL.VertexPointer(2, VertexPointerType.Float, 0, new IntPtr(pv));
-								GL.TexCoordPointer(2, TexCordPointerType.Float, 0, new IntPtr(pt));
-								GL.DrawArrays(currentImediateData.Mode, 0, currentImediateData.positions3f.Count / 2);
+                                fixed (byte* pc = c)
+                                {
+                                    GL.ColorPointer(4, ColorPointerType.UnsignedByte, 0, new IntPtr(pc));
+									GL.VertexPointer(currentImediateData.vertexCount, VertexPointerType.Float, 0, new IntPtr(pv));
+                                    GL.TexCoordPointer(2, TexCordPointerType.Float, 0, new IntPtr(pt));
+                                    GL.DrawArrays(currentImediateData.Mode, 0, currentImediateData.positions3f.Count / currentImediateData.vertexCount);
+                                }
 							}
 						}
 						GL.DisableClientState(ArrayCap.VertexArray);
 						GL.DisableClientState(ArrayCap.TextureCoordArray);
+                        GL.DisableClientState(ArrayCap.ColorArray);
 					}
 					break;
 
@@ -588,9 +626,14 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 #if USE_OPENGL
             OpenTK.Graphics.OpenGL.GL.Vertex2(x, y);
 #else
+			currentImediateData.vertexCount = 2;
 			currentImediateData.positions3f.Add((float)x);
 			currentImediateData.positions3f.Add((float)y);
-			//currentImediateData.positions3f.Add(0);
+
+            currentImediateData.color4b.add(ImediateMode.currentColor[0]);
+            currentImediateData.color4b.add(ImediateMode.currentColor[1]);
+            currentImediateData.color4b.add(ImediateMode.currentColor[2]);
+            currentImediateData.color4b.add(ImediateMode.currentColor[3]);
 #endif
         }
 
@@ -599,9 +642,17 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 #if USE_OPENGL
             OpenTK.Graphics.OpenGL.GL.Vertex3(x, y, z);
 #else
-			throw new NotImplementedException();
+			currentImediateData.vertexCount = 3;
+			currentImediateData.positions3f.Add((float)x);
+			currentImediateData.positions3f.Add((float)y);
+			currentImediateData.positions3f.Add((float)z);
+
+            currentImediateData.color4b.add(ImediateMode.currentColor[0]);
+            currentImediateData.color4b.add(ImediateMode.currentColor[1]);
+            currentImediateData.color4b.add(ImediateMode.currentColor[2]);
+            currentImediateData.color4b.add(ImediateMode.currentColor[3]);
 #endif
-        }
+		}
 
         public static void DeleteTextures(int n, ref int textures)
         {

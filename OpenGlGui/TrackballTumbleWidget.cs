@@ -92,13 +92,18 @@ namespace MatterHackers.Agg.OpenGlGui
             base.OnBoundsChanged(e);
         }
 
-        Ray lastScreenRay = new Ray(Vector3.Zero, Vector3.UnitZ);
-        public Ray LastScreenRay
+        public Vector2 GetScreenPosition(Vector3 worldPosition)
         {
-            get { return lastScreenRay; }
+            Matrix4X4 modelviewMatrix = GetModelviewMatrix();
+            Vector3 viewPosition = Vector3.Transform(worldPosition, modelviewMatrix);
+
+            Matrix4X4 projectionMatrix = GetProjectionMatrix();
+            Vector3 screenPosition = Vector3.TransformPerspective(viewPosition, projectionMatrix);
+
+            return new Vector2(screenPosition.x * Width / 2 + Width / 2, screenPosition.y / screenPosition.z * Height / 2 + Height / 2);
         }
 
-        void GetRayFromScreen(Vector2 screenPosition)
+        public Ray GetRayFromScreen(Vector2 screenPosition)
         {
             GuiWidget topWidget = this;
             while (topWidget.Parent != null)
@@ -113,19 +118,18 @@ namespace MatterHackers.Agg.OpenGlGui
             rayClip.w = 1.0;
 
             Matrix4X4 projectionMatrix = GetProjectionMatrix();
-
-            Matrix4X4 modelviewMatrix = GetModelviewMatrix();
-
             Vector4 rayEye = Vector4.Transform(rayClip, Matrix4X4.Invert(projectionMatrix));
             rayEye.z = -1; rayEye.w = 0;
 
+            Matrix4X4 modelviewMatrix = GetModelviewMatrix();
             Vector4 rayWorld = Vector4.Transform(rayEye, Matrix4X4.Invert(modelviewMatrix));
 
             Vector3 finalRayWorld = new Vector3(rayWorld).GetNormal();
 
             Matrix4X4 invTransform = Matrix4X4.Invert(modelviewMatrix);
             Vector3 origin = Vector3.Transform(Vector3.Zero, invTransform);
-            lastScreenRay = new Ray(origin, finalRayWorld);
+
+            return new Ray(origin, finalRayWorld);
         }
 
         public override void OnDraw(MatterHackers.Agg.Graphics2D graphics2D)
@@ -133,6 +137,9 @@ namespace MatterHackers.Agg.OpenGlGui
             SetGlContext();
             OnDrawGlContent();
             UnsetGlContext();
+
+            RectangleDouble bounds = LocalBounds;
+            //graphics2D.Rectangle(bounds, RGBA_Bytes.Black);
 
             if (DrawRotationHelperCircle)
             {
@@ -151,8 +158,6 @@ namespace MatterHackers.Agg.OpenGlGui
 
         public override void OnMouseDown(MouseEventArgs mouseEvent)
         {
-            GetRayFromScreen(mouseEvent.Position);
-
             base.OnMouseDown(mouseEvent);
 
             if (!LockTrackBall && MouseCaptured)
@@ -204,7 +209,7 @@ namespace MatterHackers.Agg.OpenGlGui
                 {
                     if (mainTrackBallController.CurrentTrackingType == TrackBallController.MouseDownType.None)
                     {
-                        mainTrackBallController.OnMouseDown(lastMouseMovePoint, Matrix4X4.Identity, TrackBallController.MouseDownType.Scale);
+                        mainTrackBallController.OnMouseDown(lastMouseMovePoint, Matrix4X4.Identity, TrackBallController.MouseDownType.Rotation);
                     }
                 }
             }
@@ -212,8 +217,6 @@ namespace MatterHackers.Agg.OpenGlGui
 
         public override void OnMouseMove(MouseEventArgs mouseEvent)
         {
-            GetRayFromScreen(mouseEvent.Position);
-
             base.OnMouseMove(mouseEvent);
 
             Vector2 lastMouseMovePoint;
@@ -254,19 +257,65 @@ namespace MatterHackers.Agg.OpenGlGui
             }
         }
 
+        void GradientBand(double startHeight, double endHeight, int startColor, int endColor)
+        {
+            // triangel 1
+            {
+                // top color
+                GL.Color4(startColor - 5, startColor - 5, startColor, 255);
+                GL.Vertex2(-1.0, startHeight);
+                // bottom color
+                GL.Color4(endColor - 5, endColor - 5, endColor, 255);
+                GL.Vertex2(1.0, endHeight);
+                GL.Vertex2(-1.0, endHeight);
+            }
+
+            // triangel 2
+            {
+                // top color
+                GL.Color4(startColor - 5, startColor - 5, startColor, 255);
+                GL.Vertex2(1.0, startHeight);
+                GL.Vertex2(-1.0, startHeight);
+                // bottom color
+                GL.Color4(endColor - 5, endColor - 5, endColor, 255);
+                GL.Vertex2(1.0, endHeight);
+            }
+        }
+
+        void ClearToGradient()
+        {
+            GL.MatrixMode(MatrixMode.Projection);
+            GL.LoadIdentity();
+
+            GL.MatrixMode(MatrixMode.Modelview);
+            GL.LoadIdentity();
+
+            GL.Begin(BeginMode.Triangles);
+
+            GradientBand(1, 0, 255, 245);
+            GradientBand(0, -1, 245, 220);
+
+            GL.End();
+        }
+
         void SetGlContext()
         {
 			GL.ClearDepth(1.0);
             GL.Clear(ClearBufferMask.DepthBufferBit);	// Clear the Depth Buffer
 
             GL.PushAttrib(AttribMask.ViewportBit);
-            RectangleDouble screenRect = this.TransformRectangleToScreenSpace(LocalBounds);
+            RectangleDouble screenRect = this.TransformToScreenSpace(LocalBounds);
             GL.Viewport((int)screenRect.Left, (int)screenRect.Bottom, (int)screenRect.Width, (int)screenRect.Height);
 
             GL.ShadeModel(ShadingModel.Smooth);
 
             GL.FrontFace(FrontFaceDirection.Ccw);
             GL.CullFace(CullFaceMode.Back);
+
+            GL.DepthFunc(DepthFunction.Lequal);
+
+            GL.Disable(EnableCap.DepthTest);
+            ClearToGradient();
 
             GL.DepthFunc(DepthFunction.Lequal);
 
@@ -334,7 +383,10 @@ namespace MatterHackers.Agg.OpenGlGui
         public Matrix4X4 GetProjectionMatrix()
         {
             Matrix4X4 projectionMatrix = Matrix4X4.Identity;
-            Matrix4X4.CreatePerspectiveFieldOfView(MathHelper.DegreesToRadians(45), Width / Height, 0.1f, 100.0f, out projectionMatrix);
+            if (Width > 0 && Height > 0)
+            {
+                Matrix4X4.CreatePerspectiveFieldOfView(MathHelper.DegreesToRadians(45), Width / Height, 0.1f, 100.0f, out projectionMatrix);
+            }
 
             return projectionMatrix;
         }
@@ -344,6 +396,18 @@ namespace MatterHackers.Agg.OpenGlGui
             Matrix4X4 total = Matrix4X4.CreateTranslation(0, 0, -7);
             total = mainTrackBallController.GetTransform4X4() * total;
             return total;
+        }
+
+        public double GetWorldUnitsPerScreenPixelAtPosition(Vector3 worldPosition)
+        {
+            Vector2 screenPosition = GetScreenPosition(worldPosition);
+            Ray rayFromScreen = GetRayFromScreen(screenPosition);
+            double distanceFromScreenToWorldPos = (worldPosition - rayFromScreen.origin).Length;
+
+            Ray rightOnePixelRay = GetRayFromScreen(new Vector2(screenPosition.x + 1, screenPosition.y));
+            Vector3 rightOnePixel = rightOnePixelRay.origin + rightOnePixelRay.directionNormal * distanceFromScreenToWorldPos;
+            double distBetweenPixelsWorldSpace = (rightOnePixel - worldPosition).Length;
+            return distBetweenPixelsWorldSpace;
         }
     }
 }

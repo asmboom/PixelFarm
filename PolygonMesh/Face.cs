@@ -263,5 +263,83 @@ namespace MatterHackers.PolygonMesh
                 }
             }
         }
-    }
+
+		public bool GetCutLine(Plane cutPlane, out Vector3 start, out Vector3 end)
+		{
+			start = new Vector3();
+			end = new Vector3();
+			int splitCount = 0;
+			FaceEdge prevEdge = null;
+			bool prevInFront = false;
+			bool first = true;
+			FaceEdge firstEdge = null;
+			bool firstInFront = false;
+			foreach (FaceEdge faceEdge in FaceEdges())
+			{
+				if (first)
+				{
+					prevEdge = faceEdge;
+					prevInFront = cutPlane.GetDistanceFromPlane(prevEdge.firstVertex.Position) > 0;
+					first = false;
+					firstEdge = prevEdge;
+					firstInFront = prevInFront;
+				}
+				else
+				{
+					FaceEdge curEdge = faceEdge;
+					bool curInFront = cutPlane.GetDistanceFromPlane(curEdge.firstVertex.Position) > 0;
+					if (prevInFront != curInFront)
+					{
+						// we crossed over the cut line
+						Vector3 directionNormal = (curEdge.firstVertex.Position - prevEdge.firstVertex.Position).GetNormal();
+						Ray edgeRay = new Ray(prevEdge.firstVertex.Position, directionNormal);
+						double distanceToHit;
+						bool hitFrontOfPlane;
+						if (cutPlane.RayHitPlane(edgeRay, out distanceToHit, out hitFrontOfPlane))
+						{
+							splitCount++;
+							if (splitCount == 1)
+							{
+								start = edgeRay.origin + edgeRay.directionNormal * distanceToHit;
+							}
+							else
+							{
+								end = edgeRay.origin + edgeRay.directionNormal * distanceToHit;
+							}
+						}
+					}
+
+					prevEdge = curEdge;
+					prevInFront = curInFront;
+					if (splitCount == 2)
+					{
+						break;
+					}
+				}
+			}
+
+			if (splitCount == 1 
+				&& prevInFront != firstInFront)
+			{
+				// we crossed over the cut line
+				Vector3 directionNormal = (firstEdge.firstVertex.Position - prevEdge.firstVertex.Position).GetNormal();
+				Ray edgeRay = new Ray(prevEdge.firstVertex.Position, directionNormal);
+				double distanceToHit;
+				bool hitFrontOfPlane;
+				if (cutPlane.RayHitPlane(edgeRay, out distanceToHit, out hitFrontOfPlane))
+				{
+					splitCount++;
+					end = edgeRay.origin + edgeRay.directionNormal * distanceToHit;
+				}
+			}
+
+
+			if (splitCount == 2)
+			{
+				return true;
+			}
+
+			return false;
+		}
+	}
 }

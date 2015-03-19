@@ -27,10 +27,6 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.IO;
 using MatterHackers.Agg;
 using MatterHackers.Agg.Image;
 using MatterHackers.Agg.OpenGlGui;
@@ -38,21 +34,53 @@ using MatterHackers.Agg.UI;
 using MatterHackers.Agg.VertexSource;
 using MatterHackers.PolygonMesh;
 using MatterHackers.PolygonMesh.Processors;
+using MatterHackers.RayTracer;
+using MatterHackers.RayTracer.Traceable;
 using MatterHackers.RenderOpenGl;
 using MatterHackers.VectorMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 
 namespace MatterHackers.MeshVisualizer
 {
     public class MeshViewerWidget : GuiWidget
     {
         BackgroundWorker backgroundWorker = null;
+        int selectedMeshGroupIndex = -1;
+        public RGBA_Bytes BedColor { get; set; }
+        public RGBA_Bytes BuildVolumeColor { get; set; }
+
+        double snapGridDistance = 1;
+        public double SnapGridDistance
+        {
+            get { return snapGridDistance; }
+            set { snapGridDistance = value; }
+        }
+
+        Vector3 displayVolume;
+        public Vector3 DisplayVolume { get { return displayVolume; } }
+
+        public bool AllowBedRenderingWhenEmpty { get; set; }
+        public bool RenderBed { get; set; }
+        public bool RenderBuildVolume { get; set; }
+
+        RenderTypes renderType = RenderTypes.Shaded;
+
+        public ImageBuffer BedImage;
+        TrackballTumbleWidget trackballTumbleWidget;
 
         static Dictionary<int, RGBA_Bytes> materialColors = new Dictionary<int, RGBA_Bytes>();
+
         public static RGBA_Bytes GetMaterialColor(int materialIndexBase1)
         {
-            if (materialColors.ContainsKey(materialIndexBase1))
+            using (TimedLock.Lock(materialColors, "GettingMaterialColors"))
             {
-                return materialColors[materialIndexBase1];
+                if (materialColors.ContainsKey(materialIndexBase1))
+                {
+                    return materialColors[materialIndexBase1];
+                }
             }
 
             // we currently expect at most 4 extruders
@@ -76,27 +104,19 @@ namespace MatterHackers.MeshVisualizer
 
         public static void SetMaterialColor(int materialIndexBase1, RGBA_Bytes color)
         {
-            if (!materialColors.ContainsKey(materialIndexBase1))
+            using (TimedLock.Lock(materialColors, "SettingMaterialColors"))
             {
-                materialColors.Add(materialIndexBase1, color);
-            }
-            else
-            {
-                materialColors[materialIndexBase1] = color;
+                if (!materialColors.ContainsKey(materialIndexBase1))
+                {
+                    materialColors.Add(materialIndexBase1, color);
+                }
+                else
+                {
+                    materialColors[materialIndexBase1] = color;
+                }
             }
         }
 
-        public RGBA_Bytes BedColor { get; set; }
-        public RGBA_Bytes BuildVolumeColor { get; set; }
-
-        Vector3 displayVolume;
-        public Vector3 DisplayVolume { get { return displayVolume; } }
-
-        public bool AllowBedRenderingWhenEmpty { get; set; }
-        public bool RenderBed { get; set; }
-        public bool RenderBuildVolume { get; set; }
-
-        RenderTypes renderType = RenderTypes.Shaded;
         public RenderTypes RenderType
         {
             get { return renderType; }
@@ -115,17 +135,6 @@ namespace MatterHackers.MeshVisualizer
                 }
             }
         }
-
-        public ImageBuffer BedImage;
-
-        // need to know about (or just rebuild)
-        
-        // Bed Center Change
-        // Bed Size Change
-        // Part Centering
-        // Bed Rectange on Image
-        // Bed Image Change
-        // Bed Shape Change
 
         public class PartProcessingInfo : FlowLayoutWidget
         {
@@ -162,7 +171,6 @@ namespace MatterHackers.MeshVisualizer
 
         public PartProcessingInfo partProcessingInfo;
 
-        TrackballTumbleWidget trackballTumbleWidget;
         public TrackballTumbleWidget TrackballTumbleWidget
         {
             get
@@ -171,7 +179,11 @@ namespace MatterHackers.MeshVisualizer
             }
         }
 
-        int selectedMeshGroupIndex = 0;
+        public bool HaveSelection
+        {
+            get { return MeshGroups.Count > 0 && SelectedMeshGroupIndex > -1; }
+        }
+
         public int SelectedMeshGroupIndex
         {
             get { return selectedMeshGroupIndex; }
@@ -182,7 +194,7 @@ namespace MatterHackers.MeshVisualizer
         {
             get 
             {
-                if (MeshGroups.Count > 0)
+                if (HaveSelection)
                 {
                     return MeshGroups[SelectedMeshGroupIndex];
                 }
@@ -195,7 +207,7 @@ namespace MatterHackers.MeshVisualizer
         {
             get 
             {
-                if (MeshGroupTransforms.Count > 0)
+                if (HaveSelection)
                 {
                     return MeshGroupTransforms[selectedMeshGroupIndex];
                 }
@@ -353,11 +365,12 @@ namespace MatterHackers.MeshVisualizer
             base.OnClosed(e);
         }
 
+        public List<InteractionVolume> interactionVolumes = new List<InteractionVolume>();
         void trackballTumbleWidget_DrawGlContent(object sender, EventArgs e)
         {
-            for (int i = 0; i < MeshGroups.Count; i++)
+            for (int groupIndex = 0; groupIndex < MeshGroups.Count; groupIndex++)
             {
-                MeshGroup meshGroupToRender = MeshGroups[i];
+                MeshGroup meshGroupToRender = MeshGroups[groupIndex];
 
                 int part = 0;
                 foreach (Mesh meshToRender in meshGroupToRender.Meshes)
@@ -369,9 +382,14 @@ namespace MatterHackers.MeshVisualizer
                         drawColor = GetSelectedMaterialColor(meshData.MaterialIndex);
                     }
 
-                    RenderMeshToGl.Render(meshToRender, drawColor, MeshGroupTransforms[i].TotalTransform, RenderType);
+                    RenderMeshToGl.Render(meshToRender, drawColor, MeshGroupTransforms[groupIndex].TotalTransform, RenderType);
                     part++;
                 }
+            }
+
+            foreach (InteractionVolume interactionVolume in interactionVolumes)
+            {
+                interactionVolume.DrawGlContent(e);
             }
 
             // we don't want to render the bed or bulid volume before we load a model.
@@ -386,6 +404,16 @@ namespace MatterHackers.MeshVisualizer
                 {
                     RenderMeshToGl.Render(buildVolume, this.BuildVolumeColor);
                 }
+            }
+        }
+
+        public override void OnDraw(Graphics2D graphics2D)
+        {
+            base.OnDraw(graphics2D);
+
+            foreach (InteractionVolume interactionVolume in interactionVolumes)
+            {
+                interactionVolume.Draw2DContent(graphics2D);
             }
         }
 
@@ -516,6 +544,43 @@ namespace MatterHackers.MeshVisualizer
             });
         }
 
+        private bool FindInteractionVolumeHit(Ray ray, out int interactionVolumeHitIndex, out IntersectInfo info)
+        {
+            interactionVolumeHitIndex = -1;
+            if (interactionVolumes.Count == 0 || interactionVolumes[0].CollisionVolume == null)
+            {
+                info = null;
+                return false;
+            }
+
+            List<IRayTraceable> mesheTraceables = new List<IRayTraceable>();
+            foreach (InteractionVolume interactionVolume in interactionVolumes)
+            {
+                IRayTraceable traceData = interactionVolume.CollisionVolume;
+                mesheTraceables.Add(new Transform(traceData, interactionVolume.TotalTransform));
+            }
+            IRayTraceable allObjects = BoundingVolumeHierarchy.CreateNewHierachy(mesheTraceables);
+
+            info = allObjects.GetClosestIntersection(ray);
+            if (info != null)
+            {
+                for (int i = 0; i < interactionVolumes.Count; i++ )
+                {
+                    List<IRayTraceable> insideBounds = new List<IRayTraceable>();
+                    interactionVolumes[i].CollisionVolume.GetContained(insideBounds, info.closestHitObject.GetAxisAlignedBoundingBox());
+                    if (insideBounds.Contains(info.closestHitObject))
+                    {
+                        interactionVolumeHitIndex = i;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        int volumeIndexWithMouseDown = -1;
+        public bool MouseDownOnInteractionVolume = false;
         public override void OnMouseDown(MouseEventArgs mouseEvent)
         {
             base.OnMouseDown(mouseEvent);
@@ -527,6 +592,57 @@ namespace MatterHackers.MeshVisualizer
                     trackballTumbleWidget.DrawRotationHelperCircle = true;
                 }
             }
+
+            int volumeHitIndex;
+            Ray ray = trackballTumbleWidget.GetRayFromScreen(mouseEvent.Position);
+            IntersectInfo info;
+            if (FindInteractionVolumeHit(ray, out volumeHitIndex, out info))
+            {
+                MouseEvent3DArgs mouseEvent3D = new MouseEvent3DArgs(mouseEvent, ray, info);
+                volumeIndexWithMouseDown = volumeHitIndex;
+                interactionVolumes[volumeHitIndex].OnMouseDown(mouseEvent3D);
+                MouseDownOnInteractionVolume = true;
+            }
+            else
+            {
+                MouseDownOnInteractionVolume = false;
+            }
+        }
+
+        public override void OnMouseMove(MouseEventArgs mouseEvent)
+        {
+            base.OnMouseMove(mouseEvent);
+
+            Ray ray = trackballTumbleWidget.GetRayFromScreen(mouseEvent.Position);
+            IntersectInfo info = null;
+            if (MouseDownOnInteractionVolume && volumeIndexWithMouseDown != -1)
+            {
+                MouseEvent3DArgs mouseEvent3D = new MouseEvent3DArgs(mouseEvent, ray, info);
+                interactionVolumes[volumeIndexWithMouseDown].OnMouseMove(mouseEvent3D);
+            }
+            else
+            {
+                int volumeHitIndex;
+                if (FindInteractionVolumeHit(ray, out volumeHitIndex, out info))
+                {
+                    if (volumeIndexWithMouseDown == volumeHitIndex)
+                    {
+                        MouseEvent3DArgs mouseEvent3D = new MouseEvent3DArgs(mouseEvent, ray, info);
+                        interactionVolumes[volumeHitIndex].OnMouseMove(mouseEvent3D);
+                    }
+                }
+                for (int i = 0; i < interactionVolumes.Count; i++)
+                {
+                    if (i == volumeHitIndex)
+                    {
+                        interactionVolumes[i].MouseOver = true;
+                    }
+                    else
+                    {
+                        interactionVolumes[i].MouseOver = false;
+                    }
+                }
+            }
         }
 
         public override void OnMouseUp(MouseEventArgs mouseEvent)
@@ -534,11 +650,35 @@ namespace MatterHackers.MeshVisualizer
             trackballTumbleWidget.DrawRotationHelperCircle = false;
             Invalidate();
 
+            int volumeHitIndex;
+            Ray ray = trackballTumbleWidget.GetRayFromScreen(mouseEvent.Position);
+            IntersectInfo info;
+            bool anyInteractionVolumeHit = FindInteractionVolumeHit(ray, out volumeHitIndex, out info);
+            MouseEvent3DArgs mouseEvent3D = new MouseEvent3DArgs(mouseEvent, ray, info);
+            
+            if (MouseDownOnInteractionVolume && volumeIndexWithMouseDown != -1)
+            {
+                MouseDownOnInteractionVolume = false;
+                interactionVolumes[volumeIndexWithMouseDown].OnMouseUp(mouseEvent3D);
+
+                volumeIndexWithMouseDown = -1;
+            }
+            else
+            {
+                MouseDownOnInteractionVolume = false;
+                volumeIndexWithMouseDown = -1;
+
+                if (anyInteractionVolumeHit)
+                {
+                    interactionVolumes[volumeHitIndex].OnMouseUp(mouseEvent3D);
+                }
+            }
+
             base.OnMouseUp(mouseEvent);
         }
 
         RGBA_Bytes bedMarkingsColor = RGBA_Bytes.Black;
-        RGBA_Bytes bedBaseColor = RGBA_Bytes.White;
+        RGBA_Bytes bedBaseColor = new RGBA_Bytes(245, 245, 255);
         void CreateRectangularBedGridImage(int linesInX, int linesInY)
         {
             Vector2 bedImageCentimeters = new Vector2(linesInX, linesInY);
@@ -642,6 +782,13 @@ namespace MatterHackers.MeshVisualizer
 #if DEBUG
             throw new Exception("DEBUG is defined and should not be!");
 #endif
+        }
+
+        public AxisAlignedBoundingBox GetBoundsForSelection()
+        {
+            Matrix4X4 selectedMeshTransform = SelectedMeshGroupTransform.TotalTransform;
+            AxisAlignedBoundingBox selectedBounds = SelectedMeshGroup.GetAxisAlignedBoundingBox(selectedMeshTransform);
+            return selectedBounds;
         }
     }
 }
