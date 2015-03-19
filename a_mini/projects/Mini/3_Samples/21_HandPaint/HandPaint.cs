@@ -1,4 +1,4 @@
-//BSD 2014, WinterDev
+ï»¿//BSD 2014, WinterDev
 
 /*
 Copyright (c) 2013, Lars Brubaker
@@ -30,6 +30,7 @@ either expressed or implied, of the FreeBSD Project.
 */
 
 using System;
+using System.Collections.Generic;
 using PixelFarm.Agg.Transform;
 using PixelFarm.Agg.Image;
 using PixelFarm.Agg.VertexSource;
@@ -38,40 +39,54 @@ using PixelFarm.VectorMath;
 using Mini;
 namespace PixelFarm.Agg.Samples
 {
-    [Info(OrderCode = "03")]
-    [Info("Affine transformer, and basic renderers. You can rotate and scale the “Lion” with the"
-      + " left mouse button. Right mouse button adds “skewing” transformations, proportional to the “X” "
-      + "coordinate. The image is drawn over the old one with a cetrain opacity value. Change “Alpha” "
-      + "to draw funny looking “lions”. Change window size to clear the window.")]
-    public class LionFillExample : DemoBase
+    [Info(OrderCode = "21")]
+    [Info("hand paint!")]
+    public class HandPaintExample : DemoBase
     {
-        PixelFarm.Agg.LionFillSprite lionFill;
+
+        Point latestMousePoint; 
+        List<Point> contPoints = new List<Point>();
+        List<double> points = new List<double>();
+
+        CanvasPainter p;
         public override void Init()
         {
-            lionFill = new LionFillSprite();
+
         }
         public override void Draw(Graphics2D g)
         {
-            lionFill.OnDraw(g);
+            if (p == null)
+            {
+                p = new CanvasPainter(g);
+                p.StrokeColor = ColorRGBA.Black;
+                p.StrokeWidth = 1;
+            }
+
+            p.Clear(ColorRGBA.White);
+            int pcount = contPoints.Count;
+            for (int i = 1; i < pcount; ++i)
+            {
+                var p0 = contPoints[i - 1];
+                var p1 = contPoints[i];
+                p.Line(p0.x, p0.y, p1.x, p1.y);
+            }
+
         }
         public override void MouseDrag(int x, int y)
         {
-            lionFill.Move(x, y);
-        }
+            //add data to draw
+            contPoints.Add(new Point(x, y));
 
-        [DemoConfig(MaxValue = 255)]
-        public int AlphaValue
+        }
+        public override void MouseDown(int x, int y, bool isRightButton)
         {
-            get { return lionFill.AlphaValue; }
-            set
-            {
-                lionFill.AlphaValue = (byte)value;
-            }
+            latestMousePoint = new Point(x, y);
+            base.MouseDown(x, y, isRightButton);
         }
     }
 
     //--------------------------------------------------
-  
+
 
 
 }

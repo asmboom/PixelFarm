@@ -54,7 +54,7 @@ namespace PixelFarm.Agg
         Ellipse ellipse = new Ellipse();
         PathWriter lines = new PathWriter();
         RoundedRect roundRect = null;
-       
+
         MyImageReaderWriter sharedImageWriterReader = new MyImageReaderWriter();
         CurveFlattener curveFlattener = new CurveFlattener();
 
@@ -154,6 +154,7 @@ namespace PixelFarm.Agg
             lines.LineTo(x2, y2);
             gx.Render(stroke.MakeVxs(lines.Vxs), this.strokeColor);
         }
+         
         public double StrokeWidth
         {
             get { return this.stroke.Width; }
@@ -255,7 +256,7 @@ namespace PixelFarm.Agg
            double x,
            double y)
         {
-            textPrinter.Print(this,text.ToString(), x, y); 
+            textPrinter.Print(this, text.ToString(), x, y);
         }
         //-------------------------------------------------------
 
