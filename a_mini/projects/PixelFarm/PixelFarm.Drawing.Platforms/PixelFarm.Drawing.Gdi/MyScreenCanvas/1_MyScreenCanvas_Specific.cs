@@ -1,5 +1,5 @@
 ﻿//2014,2015 BSD, WinterDev
-//ArthurHub
+//ArthurHub  , Jose Manuel Menendez Poo
 
 // "Therefore those skilled at the unorthodox
 // are infinite as heaven and earth,
@@ -15,34 +15,36 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text; 
+using System.Text;
 using Win32;
 
 namespace PixelFarm.Drawing.WinGdi
 {
 
-    partial class MyCanvas : Canvas, IFonts
+    partial class MyScreenCanvas : Canvas, IFonts, IDisposable
     {
         int pageNumFlags;
         int pageFlags;
         bool isDisposed;
 
+        IntPtr originalHdc = IntPtr.Zero;
         System.Drawing.Graphics gx;
         IntPtr hRgn = IntPtr.Zero;
-        IntPtr _hdc;
+        IntPtr tempDc;//temp dc from gx
         IntPtr hbmp;
         IntPtr hFont = IntPtr.Zero;
-        IntPtr originalHdc = IntPtr.Zero;
+
         Stack<System.Drawing.Rectangle> clipRectStack = new Stack<System.Drawing.Rectangle>();
         //-------------------------------
+        System.Drawing.Bitmap bgBmp;
         System.Drawing.Color currentTextColor = System.Drawing.Color.Black;
         System.Drawing.Pen internalPen;
         System.Drawing.SolidBrush internalSolidBrush;
         System.Drawing.Rectangle currentClipRect;
         //-------------------------------
-        bool isFromPrinter = false;
+
         GraphicsPlatform platform;
-        public MyCanvas(GraphicsPlatform platform,
+        public MyScreenCanvas(GraphicsPlatform platform,
             int horizontalPageNum,
             int verticalPageNum,
             int left, int top,
@@ -50,53 +52,67 @@ namespace PixelFarm.Drawing.WinGdi
             int height)
         {
 
+            //platform specific Win32
+            //1.
             this.platform = platform;
 
             this.pageNumFlags = (horizontalPageNum << 8) | verticalPageNum;
-
+            //2. dimension
             this.left = left;
             this.top = top;
             this.right = left + width;
             this.bottom = top + height;
 
+            CreateGraphicsFromNativeHdc(width, height);
+
+
+            //-------------------------------------------------------
+            currentClipRect = new System.Drawing.Rectangle(0, 0, width, height);
+
+            var fontInfo = platform.GetFont("tahoma", 10, FontStyle.Regular);
+            this.CurrentFont = defaultFont = fontInfo.ResolvedFont;
+            this.CurrentTextColor = Color.Black;
 
             internalPen = new System.Drawing.Pen(System.Drawing.Color.Black);
             internalSolidBrush = new System.Drawing.SolidBrush(System.Drawing.Color.Black);
 
-            //-------------------------------------------------------
-            originalHdc = MyWin32.CreateCompatibleDC(IntPtr.Zero);
-            System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            hbmp = bmp.GetHbitmap();
-            MyWin32.SelectObject(originalHdc, hbmp);
-            MyWin32.PatBlt(originalHdc, 0, 0, width, height, MyWin32.WHITENESS);
-            MyWin32.SetBkMode(originalHdc, MyWin32._SetBkMode_TRANSPARENT);
-            hFont = MyWin32.SelectObject(originalHdc, hFont);
-            currentClipRect = new System.Drawing.Rectangle(0, 0, width, height);
-            hRgn = MyWin32.CreateRectRgn(0, 0, width, height);
-            MyWin32.SelectObject(originalHdc, hRgn);
-            gx = System.Drawing.Graphics.FromHdc(originalHdc);
-            //-------------------------------------------------------
-
-            //-------------------------------------------------------
-            var fontInfo = platform.GetFont("tahoma", 10, FontStyle.Regular);
-            defaultFont = fontInfo.ResolvedFont;
-            this.CurrentFont = defaultFont;
-            this.CurrentTextColor = Color.Black;
 #if DEBUG
             debug_canvas_id = dbug_canvasCount + 1;
             dbug_canvasCount += 1;
-#endif      
+#endif
             this.StrokeWidth = 1;
         }
+        void CreateGraphicsFromNativeHdc(int width, int height)
+        {
 
-        //~MyCanvas()
-        //{
-        //    Dispose();
-        //}
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public override void Dispose()
+            //3. create original dc from memory dc and prepare background
+            var orgHdc = MyWin32.CreateCompatibleDC(IntPtr.Zero);
+
+            bgBmp = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            hbmp = bgBmp.GetHbitmap();
+            MyWin32.SelectObject(orgHdc, hbmp);
+            MyWin32.PatBlt(orgHdc, 0, 0, width, height, MyWin32.WHITENESS);
+            MyWin32.SetBkMode(orgHdc, MyWin32._SetBkMode_TRANSPARENT);
+
+            //4. font
+            hFont = MyWin32.SelectObject(orgHdc, hFont);
+
+            //5. region
+            hRgn = MyWin32.CreateRectRgn(0, 0, width, height);
+            MyWin32.SelectObject(orgHdc, hRgn);
+
+            //6. create graphics from hdc***  
+
+            gx = System.Drawing.Graphics.FromHdc(orgHdc);
+            this.originalHdc = orgHdc;
+        }
+        public override string ToString()
+        {
+            return "visible_clip" + this.gx.VisibleClipBounds.ToString();
+
+        }
+
+        public override void CloseCanvas()
         {
             if (isDisposed)
             {
@@ -107,6 +123,25 @@ namespace PixelFarm.Drawing.WinGdi
             ReleaseHdc();
             ReleaseUnManagedResource();
         }
+        /// <summary>
+        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+        /// </summary>
+        void IDisposable.Dispose()
+        {
+            if (isDisposed)
+            {
+                return;
+            }
+            this.CloseCanvas();
+        }
+        void IFonts.Dispose()
+        {
+            if (isDisposed)
+            {
+                return;
+            }
+            this.CloseCanvas();
+        }
 
         void ClearPreviousStoredValues()
         {
@@ -116,7 +151,7 @@ namespace PixelFarm.Drawing.WinGdi
             this.clipRectStack.Clear();
         }
 
-        public void ReleaseUnManagedResource()
+        void ReleaseUnManagedResource()
         {
 
             if (hRgn != IntPtr.Zero)
@@ -162,24 +197,24 @@ namespace PixelFarm.Drawing.WinGdi
         public void Reset(int hPageNum, int vPageNum, int newWidth, int newHeight)
         {
             this.pageNumFlags = (hPageNum << 8) | vPageNum;
-
             this.ReleaseUnManagedResource();
             this.ClearPreviousStoredValues();
 
-            originalHdc = MyWin32.CreateCompatibleDC(IntPtr.Zero);
+            var orgHdc = MyWin32.CreateCompatibleDC(IntPtr.Zero);
             System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(newWidth, newHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             hbmp = bmp.GetHbitmap();
-            MyWin32.SelectObject(originalHdc, hbmp);
-            MyWin32.PatBlt(originalHdc, 0, 0, newWidth, newHeight, MyWin32.WHITENESS);
-            MyWin32.SetBkMode(originalHdc, MyWin32._SetBkMode_TRANSPARENT);
+            MyWin32.SelectObject(orgHdc, hbmp);
+            MyWin32.PatBlt(orgHdc, 0, 0, newWidth, newHeight, MyWin32.WHITENESS);
+            MyWin32.SetBkMode(orgHdc, MyWin32._SetBkMode_TRANSPARENT);
 
 
             hFont = defaultHFont;
 
-            MyWin32.SelectObject(originalHdc, hFont);
+            MyWin32.SelectObject(orgHdc, hFont);
             currentClipRect = new System.Drawing.Rectangle(0, 0, newWidth, newHeight);
-            MyWin32.SelectObject(originalHdc, hRgn);
-            gx = System.Drawing.Graphics.FromHdc(originalHdc);
+            MyWin32.SelectObject(orgHdc, hRgn);
+            gx = System.Drawing.Graphics.FromHdc(orgHdc);
+            this.originalHdc = orgHdc;
 
             gx.Clear(System.Drawing.Color.White);
             MyWin32.SetRectRgn(hRgn, 0, 0, newWidth, newHeight);
@@ -240,11 +275,12 @@ namespace PixelFarm.Drawing.WinGdi
         /// </summary>
         void InitHdc()
         {
-            if (_hdc == IntPtr.Zero)
+            if (tempDc == IntPtr.Zero)
             {
                 //var clip = _g.Clip.GetHrgn(_g);
-                _hdc = gx.GetHdc();
-                Win32Utils.SetBkMode(_hdc, 1);
+                tempDc = gx.GetHdc();
+                Win32Utils.SetBkMode(tempDc, 1);
+
                 //Win32Utils.SelectClipRgn(_hdc, clip);
                 //Win32Utils.DeleteObject(clip);
             }
@@ -255,11 +291,11 @@ namespace PixelFarm.Drawing.WinGdi
         /// </summary>
         void ReleaseHdc()
         {
-            if (_hdc != IntPtr.Zero)
+            if (tempDc != IntPtr.Zero)
             {
-                Win32Utils.SelectClipRgn(_hdc, IntPtr.Zero);
-                gx.ReleaseHdc(_hdc);
-                _hdc = IntPtr.Zero;
+                Win32Utils.SelectClipRgn(tempDc, IntPtr.Zero);
+                gx.ReleaseHdc(tempDc);
+                tempDc = IntPtr.Zero;
             }
         }
 
@@ -270,8 +306,8 @@ namespace PixelFarm.Drawing.WinGdi
         void SetFont(Font font)
         {
             InitHdc();
-            
-            Win32Utils.SelectObject(_hdc, FontStore.GetCachedHFont(font.InnerFont as System.Drawing.Font));
+
+            Win32Utils.SelectObject(tempDc, FontStore.GetCachedHFont(font.InnerFont as System.Drawing.Font));
         }
 
         /// <summary>
@@ -281,7 +317,7 @@ namespace PixelFarm.Drawing.WinGdi
         {
             InitHdc();
             int rgb = (color.B & 0xFF) << 16 | (color.G & 0xFF) << 8 | color.R;
-            Win32Utils.SetTextColor(_hdc, rgb);
+            Win32Utils.SetTextColor(tempDc, rgb);
         }
 
         /// <summary>
@@ -306,7 +342,7 @@ namespace PixelFarm.Drawing.WinGdi
                 Win32Utils.SetTextColor(memoryHdc, (color.B & 0xFF) << 16 | (color.G & 0xFF) << 8 | color.R);
 
                 // Draw text to memory HDC
-                Win32Utils.TextOut(memoryHdc, 0, 0, str, str.Length);
+                NativeTextWin32.TextOut(memoryHdc, 0, 0, str, str.Length);
 
                 // copy from memory HDC to normal HDC with alpha blend so achieve the transparent text
                 Win32Utils.AlphaBlend(hdc, point.X, point.Y, size.Width, size.Height, memoryHdc, 0, 0, size.Width, size.Height, new BlendFunction(color.A));
@@ -341,7 +377,7 @@ namespace PixelFarm.Drawing.WinGdi
 
         static System.Drawing.Font defaultGdiFont;
 
-        static MyCanvas()
+        static MyScreenCanvas()
         {
             _stringFormat = new System.Drawing.StringFormat(System.Drawing.StringFormat.GenericDefault);
             _stringFormat.FormatFlags = System.Drawing.StringFormatFlags.NoClip | System.Drawing.StringFormatFlags.MeasureTrailingSpaces;
@@ -350,23 +386,11 @@ namespace PixelFarm.Drawing.WinGdi
             defaultHFont = defaultGdiFont.ToHfont();
 
         }
-
-
-        static System.Drawing.Point[] ConvPointArray(Point[] points)
-        {
-            int j = points.Length;
-            System.Drawing.Point[] outputPoints = new System.Drawing.Point[j];
-            for (int i = 0; i < j; ++i)
-            {
-                outputPoints[i] = points[i].ToPoint();
-            }
-            return outputPoints;
-        }
         static System.Drawing.PointF[] ConvPointFArray(PointF[] points)
         {
             int j = points.Length;
             System.Drawing.PointF[] outputPoints = new System.Drawing.PointF[j];
-            for (int i = 0; i < j; ++i)
+            for (int i = j - 1; i >= 0; --i)
             {
                 outputPoints[i] = points[i].ToPointF();
             }
@@ -377,35 +401,6 @@ namespace PixelFarm.Drawing.WinGdi
         {
             return System.Drawing.Color.FromArgb(c.A, c.R, c.G, c.B);
         }
-
-
-        static System.Drawing.Bitmap ConvBitmap(Bitmap bmp)
-        {
-            return bmp.InnerImage as System.Drawing.Bitmap;
-        }
-        static System.Drawing.Image ConvBitmap(Image img)
-        {
-            return img.InnerImage as System.Drawing.Image;
-        }
-        static System.Drawing.Drawing2D.GraphicsPath ConvPath(GraphicsPath p)
-        {
-            return p.InnerPath as System.Drawing.Drawing2D.GraphicsPath;
-        }
-        static System.Drawing.Font ConvFont(Font f)
-        {
-            return f.InnerFont as System.Drawing.Font;
-        }
-        static System.Drawing.Region ConvRgn(Region rgn)
-        {
-            return rgn.InnerRegion as System.Drawing.Region;
-        }
-        static System.Drawing.Drawing2D.GraphicsPath ConvFont(GraphicsPath p)
-        {
-            return p.InnerPath as System.Drawing.Drawing2D.GraphicsPath;
-        }
-        //=========================================================
-
-
 
 
 

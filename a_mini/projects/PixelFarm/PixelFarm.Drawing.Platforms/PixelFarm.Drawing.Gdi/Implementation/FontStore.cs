@@ -1,5 +1,5 @@
 ﻿// 2015,2014 ,BSD, WinterDev   
-//ArthurHub
+//ArthurHub  , Jose Manuel Menendez Poo
 
 // "Therefore those skilled at the unorthodox
 // are infinite as heaven and earth,
@@ -212,7 +212,10 @@ namespace PixelFarm.Drawing.WinGdi
 
             foreach (var family in System.Drawing.FontFamily.Families)
             {
-                _existingFontFamilies.Add(family.Name, family);
+                if (_existingFontFamilies.ContainsKey(family.Name) == false)
+                {
+                    _existingFontFamilies.Add(family.Name, family);
+                }
             }
         }
 

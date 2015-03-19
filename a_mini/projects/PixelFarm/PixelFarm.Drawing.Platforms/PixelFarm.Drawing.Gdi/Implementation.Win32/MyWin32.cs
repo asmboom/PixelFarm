@@ -205,11 +205,8 @@ namespace Win32
 
         [DllImport("user32.dll")]
         public static extern bool FrameRect(IntPtr hDC, ref MyWin32.Win32Rect rect, IntPtr hBrush);
-
-
-
-        [DllImport("gdi32.dll")]
-        public static extern bool TextOut(IntPtr hdc, int nXStart, int nYStart, string lpstring, int cbstring);
+         
+      
         [StructLayout(LayoutKind.Sequential)]
         public struct WIN32SIZE
         {
@@ -393,8 +390,7 @@ namespace Win32
                 return rect;
             }
 
-            public static readonly Win32Rect Empty = new Win32Rect(0, 0, 0, 0);
-
+            public static readonly Win32Rect Empty = new Win32Rect(0, 0, 0, 0); 
         }
         [StructLayout(LayoutKind.Sequential)]
         public struct ABC

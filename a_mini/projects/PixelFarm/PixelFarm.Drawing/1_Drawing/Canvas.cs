@@ -3,8 +3,9 @@
 
 namespace PixelFarm.Drawing
 {
-    public abstract class Canvas : System.IDisposable
+    public abstract class Canvas 
     {
+        bool isContentReady;
 #if DEBUG
         public static int dbug_canvasCount = 0;
         public int debug_resetCount = 0;
@@ -14,10 +15,10 @@ namespace PixelFarm.Drawing
         //const int CANVAS_UNUSED = 1 << (1 - 1);
         //const int CANVAS_DIMEN_CHANGED = 1 << (2 - 1);
         public Canvas()
-        {
-
+        { 
         }
-        public abstract void Dispose();
+        public abstract void CloseCanvas();
+        
         public abstract GraphicsPlatform Platform { get; }
         public abstract SmoothingMode SmoothingMode { get; set; }
         //---------------------------------------------------------------------
@@ -25,9 +26,22 @@ namespace PixelFarm.Drawing
         public abstract Color StrokeColor { get; set; }
 
         //states
-        public abstract void Invalidate(Rect rect);
-        public abstract Rect InvalidateArea { get; }
-        public bool IsContentReady { get; set; }
+        public abstract void ResetInvalidateArea();
+        public abstract void Invalidate(Rectangle rect);
+        public abstract Rectangle InvalidateArea { get; }
+        
+
+        public bool IsContentReady
+        {
+            get { return isContentReady; }
+            set
+            {
+                this.isContentReady = value;
+                //if (!value)
+                //{
+                //}
+            }
+        }
         //---------------------------------------------------------------------
         // canvas dimension, canvas origin
         public abstract int Top { get; }
@@ -42,11 +56,11 @@ namespace PixelFarm.Drawing
         public abstract int CanvasOriginX { get; }
         public abstract int CanvasOriginY { get; }
         public abstract void SetCanvasOrigin(int x, int y);
-        public abstract bool IntersectsWith(Rect clientRect);
+        public abstract bool IntersectsWith(Rectangle clientRect);
         //---------------------------------------------------------------------
         //clip area
 
-        public abstract bool PushClipAreaRect(int width, int height, ref Rect updateArea);
+        public abstract bool PushClipAreaRect(int width, int height,ref Rectangle updateArea);
         public abstract void PopClipAreaRect();
 
         public abstract void SetClipRect(Rectangle clip, CombineMode combineMode = CombineMode.Replace);
@@ -54,7 +68,7 @@ namespace PixelFarm.Drawing
         //------------------------------------------------------
         //buffer
         public abstract void ClearSurface(Color c);
-        public abstract void CopyFrom(Canvas sourceCanvas, int logicalSrcX, int logicalSrcY, Rectangle destArea);
+        //public abstract void CopyFrom(Canvas sourceCanvas, int logicalSrcX, int logicalSrcY, Rectangle destArea);
         public abstract void RenderTo(System.IntPtr destHdc, int sourceX, int sourceY, Rectangle destArea);
         //------------------------------------------------------- 
 
@@ -114,6 +128,10 @@ namespace PixelFarm.Drawing
         {
             get;
             set;
+        }
+        public void Dispose()
+        {
+
         }
     }
 }
