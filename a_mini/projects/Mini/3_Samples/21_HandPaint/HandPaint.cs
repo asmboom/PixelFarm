@@ -45,8 +45,7 @@ namespace PixelFarm.Agg.Samples
     {
 
         Point latestMousePoint; 
-        List<Point> contPoints = new List<Point>();
-        List<double> points = new List<double>();
+        List<Point> contPoints = new List<Point>(); 
 
         CanvasPainter p;
         public override void Init()
