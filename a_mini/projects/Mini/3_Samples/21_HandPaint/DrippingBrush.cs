@@ -44,7 +44,7 @@ namespace PixelFarm.Agg.Samples
                 }
                 else
                 {
-                    List<Point> contPoints = brushPath.contPoints;
+                    var contPoints = brushPath.contPoints;
                     int pcount = contPoints.Count;
                     for (int i = 1; i < pcount; ++i)
                     {
@@ -102,38 +102,6 @@ namespace PixelFarm.Agg.Samples
             base.MouseDown(x, y, isRightButton);
         }
     }
-
-    class MyBrushPath
-    {
-        internal VertexStore vxs;
-        internal List<Point> contPoints = new List<Point>();
-        public void AddPointLast(int x, int y)
-        {
-            contPoints.Add(new Point(x, y));
-        }
-        public void AddPointFirst(int x, int y)
-        {
-            contPoints.Insert(0, new Point(x, y));
-        }
-        public void Close()
-        {
-            this.vxs = new VertexStore();
-            int j = contPoints.Count;
-            if (j > 0)
-            {
-                var p = contPoints[0];
-                vxs.AddMoveTo(p.x, p.y);
-                for (int i = 1; i < j; ++i)
-                {
-                    p = contPoints[i];
-                    vxs.AddLineTo(p.x, p.y);
-                }
-                vxs.AddCloseFigure();
-            }
-        }
-    }
-    //--------------------------------------------------
-
 
 
 }

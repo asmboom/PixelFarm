@@ -19,8 +19,8 @@ namespace Mini
         {
             InitializeComponent();
             this.Load += new EventHandler(DevForm_Load);
-            this.listBox1.DoubleClick += new EventHandler(listBox1_DoubleClick); 
-            this.Text = "DevForm: Double Click The Example!"; 
+            this.listBox1.DoubleClick += new EventHandler(listBox1_DoubleClick);
+            this.Text = "DevForm: Double Click The Example!";
             //test native font
 
 
@@ -229,6 +229,60 @@ namespace Mini
                 //-------------------------------------------------
                 //Compare with Gdi+ Font
                 g.DrawString(testChar.ToString(), ff, Brushes.Black, new PointF(0, 50));
+            }
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            //----------------------
+            //1. test gdi+ font path
+            char testChar = 'b';
+            float fontSize = 20;
+
+
+            using (Graphics g = this.pictureBox1.CreateGraphics())
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.Clear(Color.White);
+
+                //convert Agg vxs to bitmap
+                int bmpW = 500;
+                int bmpH = 500;
+                using (Bitmap bufferBmp = new Bitmap(bmpW, bmpH))
+                {
+                    ActualImage actualImage = new ActualImage(bmpW, bmpH, PixelFarm.Agg.Image.PixelFormat.Rgba32);
+                    Graphics2D gfx = Graphics2D.CreateFromImage(actualImage);
+                    var vxs = new VertexStore();
+
+                    //vxs.AddMoveTo(0, 0);
+                    ////vxs.AddP3c(100, 0);
+                    ////vxs.AddP3c(100,150);
+                    ////vxs.AddLineTo(0,0);
+                    //vxs.AddLineTo(0, 0);
+                    //vxs.AddP3c(100, 0);
+                    ////vxs.AddLineTo(100, 0);
+                    ////vxs.AddLineTo(100, 150);
+                    //vxs.AddP3c(100, 150);
+                    //vxs.AddLineTo(0, 150);
+                    //vxs.AddCloseFigure();
+
+                    //PixelFarm.Agg.VertexSource.CurveFlattener cflat = new PixelFarm.Agg.VertexSource.CurveFlattener();
+                    //vxs = cflat.MakeVxs(vxs);
+
+                    gfx.Render(vxs, ColorRGBA.Black);
+                    //test subpixel rendering 
+                    vxs = PixelFarm.Agg.Transform.Affine.TranslateToVxs(vxs, 15, 0);
+                    gfx.UseSubPixelRendering = true;
+                    gfx.Render(vxs, ColorRGBA.Black);
+                    PixelFarm.Agg.Image.BitmapHelper.CopyToWindowsBitmap(
+                      actualImage, //src from actual img buffer
+                      bufferBmp, //dest to buffer bmp
+                     new RectInt(0, 0, bmpW, bmpH));
+                    //-----------------------------------------
+                    bufferBmp.RotateFlip(RotateFlipType.RotateNoneFlipY);
+                    g.DrawImage(bufferBmp, new Point(0, 30));
+                }
+
             }
         }
     }
