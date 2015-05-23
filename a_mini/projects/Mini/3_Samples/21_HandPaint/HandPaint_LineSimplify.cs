@@ -38,7 +38,7 @@ namespace PixelFarm.Agg.Samples
             //  }
 
             testPoints.AddRange(
-             new Point[] { new Point(199, 282), new Point(199, 251), new Point(199, 218), new Point(199, 194), new Point(214, 165), new Point(224, 160), new Point(240, 159), new Point(249, 159), new Point(255, 160), new Point(260, 165), new Point(262, 167), new Point(263, 168), new Point(264, 169) }
+             new Point[] { new Point(305, 397), new Point(305, 394), new Point(302, 387), new Point(301, 364), new Point(283, 335), new Point(270, 296), new Point(268, 215), new Point(206, 174), new Point(201, 163), new Point(200, 157), new Point(198, 154), new Point(198, 154), new Point(197, 154), new Point(195, 157), new Point(194, 163), new Point(190, 175), new Point(166, 252), new Point(225, 319), new Point(253, 354), new Point(274, 383), new Point(296, 392), new Point(301, 396), new Point(304, 398) }
              );
             //new VECTOR(0,0),
             // new VECTOR(50,50),
@@ -88,10 +88,9 @@ namespace PixelFarm.Agg.Samples
                 FillPoint(cc.p0, p);
                 FillPoint(cc.p1, p);
                 FillPoint(cc.p2, p);
-                FillPoint(cc.p3, p);
+                FillPoint(cc.p3, p); 
 
-
- 
+                
                 p.DrawBezierCurve(
                    (float)cc.p0.x, (float)cc.p0.y,
                    (float)cc.p3.x, (float)cc.p3.y,
@@ -140,14 +139,15 @@ namespace PixelFarm.Agg.Samples
             CreateFitCurves();
             base.MouseUp(x, y);
         }
-        string DumpPointsToString()
+#if DEBUG
+        static string dbugDumpPointsToString(List<Point> points)
         {
             System.Text.StringBuilder stbuilder = new System.Text.StringBuilder();
-            int j = this.currentPointSet.Count;
+            int j = points.Count;
             stbuilder.Append("new VECTOR[]{");
             for (int i = 0; i < j; ++i)
             {
-                Point pp = this.currentPointSet[i];
+                Point pp = points[i];
                 stbuilder.Append("new VECTOR(" + pp.x.ToString() + "," + pp.y.ToString() + ")");
                 if (i < j - 1)
                 {
@@ -157,14 +157,14 @@ namespace PixelFarm.Agg.Samples
             stbuilder.Append("}");
             return stbuilder.ToString();
         }
-        string DumpPointsToString2()
+        static string dbugDumpPointsToString2(List<Point> points)
         {
             System.Text.StringBuilder stbuilder = new System.Text.StringBuilder();
-            int j = this.currentPointSet.Count;
+            int j = points.Count;
             stbuilder.Append("new Point[]{");
             for (int i = 0; i < j; ++i)
             {
-                Point pp = this.currentPointSet[i];
+                Point pp = points[i];
                 stbuilder.Append("new Point(" + pp.x.ToString() + "," + pp.y.ToString() + ")");
                 if (i < j - 1)
                 {
@@ -174,6 +174,7 @@ namespace PixelFarm.Agg.Samples
             stbuilder.Append("}");
             return stbuilder.ToString();
         }
+#endif
         void CreateFitCurves()
         {
 
@@ -192,7 +193,7 @@ namespace PixelFarm.Agg.Samples
 
             //string code = DumpPointsToString();
             //string code2 = DumpPointsToString2(); 
-
+            //var data2 = data;
             var data2 = CurvePreprocess.RdpReduce(data, 2);
 
             j = data2.Count;
