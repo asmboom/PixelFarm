@@ -27,6 +27,12 @@ namespace PixelFarm.Agg.Samples
         {
 
         }
+        [DemoConfig]
+        public bool UseEraseBrush
+        {
+            get;
+            set;
+        }
         public override void Draw(Graphics2D g)
         {
             if (p == null)
@@ -38,16 +44,21 @@ namespace PixelFarm.Agg.Samples
 
             p.Clear(ColorRGBA.White);
             p.FillColor = ColorRGBA.Black;
+
             foreach (var brushPath in this.myBrushPathList)
             {
 
                 if (brushPath.vxs != null)
                 {
-                    p.FillColor = ColorRGBA.Black;
+
+                    p.FillColor = brushPath.FillColor;
                     p.Fill(brushPath.vxs);
 
-                    p.StrokeColor = ColorRGBA.Red;
-                    p.Draw(brushPath.vxs);
+                    if (brushPath.StrokeColor.alpha > 0)
+                    {
+                        p.StrokeColor = ColorRGBA.Red;
+                        p.Draw(brushPath.vxs);
+                    }
 
                 }
                 else if (brushPath.cubicBzs != null)
@@ -103,7 +114,7 @@ namespace PixelFarm.Agg.Samples
             //midpoint
             var midPoint = (newPoint + oldPoint) / 2;
             delta = delta.NewLength(5);
-            delta.Rotate(90); 
+            delta.Rotate(90);
 
             var newTopPoint = midPoint + delta;
             var newBottomPoint = midPoint - delta;
@@ -120,6 +131,17 @@ namespace PixelFarm.Agg.Samples
         {
             latestMousePoint = new Point(x, y);
             currentBrushPath = new MyBrushPath();
+            if (this.UseEraseBrush)
+            {
+                currentBrushPath.FillColor = ColorRGBA.White;
+                currentBrushPath.StrokeColor = ColorRGBA.Transparent;
+            }
+            else
+            {
+                currentBrushPath.FillColor = ColorRGBA.Black;
+                currentBrushPath.StrokeColor = ColorRGBA.Red;
+                
+            }
             this.myBrushPathList.Add(currentBrushPath);
             currentBrushPath.AddPointFirst(x, y);
             base.MouseDown(x, y, isRightButton);

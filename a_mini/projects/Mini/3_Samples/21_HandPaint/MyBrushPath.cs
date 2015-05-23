@@ -22,8 +22,10 @@ namespace PixelFarm.Agg.Samples
 
         bool isValidSmooth = false;
 
-
-
+        public MyBrushPath()
+        {
+            this.StrokeColor = ColorRGBA.Transparent;
+        }
         public void AddPointLast(int x, int y)
         {
             contPoints.Add(new Vector2(x, y));
@@ -33,6 +35,16 @@ namespace PixelFarm.Agg.Samples
         {
             contPoints.Insert(0, new Vector2(x, y));
             isValidSmooth = false;
+        }
+        public ColorRGBA FillColor
+        {
+            get;
+            set; 
+        }
+        public ColorRGBA StrokeColor
+        {
+            get;
+            set;
         }
         public void GetSmooth()
         {
