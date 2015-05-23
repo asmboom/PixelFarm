@@ -8,6 +8,8 @@ using PixelFarm.Agg.VertexSource;
 using PixelFarm.VectorMath;
 
 using Mini;
+using burningmime.curves; //for curve fit
+
 namespace PixelFarm.Agg.Samples
 {
     [Info(OrderCode = "21")]
@@ -22,10 +24,30 @@ namespace PixelFarm.Agg.Samples
 
         CanvasPainter p;
         List<Point> currentPointSet;// = new List<Point>();//current point list
+        List<CubicBezier> cubicCurves = new List<CubicBezier>();
 
         public override void Init()
         {
+            List<Point> testPoints = new List<Point>();
 
+            //new VECTOR[]{
+            //      new VECTOR(50,300),
+            //      new VECTOR(52,50),
+            //      new VECTOR(100,45),
+            //      new VECTOR(150,150),
+            //  }
+
+            testPoints.AddRange(
+             new Point[] { new Point(199, 282), new Point(199, 251), new Point(199, 218), new Point(199, 194), new Point(214, 165), new Point(224, 160), new Point(240, 159), new Point(249, 159), new Point(255, 160), new Point(260, 165), new Point(262, 167), new Point(263, 168), new Point(264, 169) }
+             );
+            //new VECTOR(0,0),
+            // new VECTOR(50,50),
+            // new VECTOR(90,100),
+            // new VECTOR(150,150)
+
+            pointSets.Add(testPoints);
+            currentPointSet = testPoints;
+            CreateFitCurves();
         }
         public override void Draw(Graphics2D g)
         {
@@ -35,7 +57,7 @@ namespace PixelFarm.Agg.Samples
                 p.StrokeColor = ColorRGBA.Black;
                 p.StrokeWidth = 1;
             }
-          
+
             p.Clear(ColorRGBA.White);
 
             var plistCount = pointSets.Count;
@@ -56,8 +78,33 @@ namespace PixelFarm.Agg.Samples
                 DrawLineSet(p, contPoints);
             }
 
+            p.StrokeColor = ColorRGBA.Blue;
+            p.FillColor = ColorRGBA.Black;
+
+            int ccount = cubicCurves.Count;
+            for (int i = 0; i < ccount; ++i)
+            {
+                var cc = cubicCurves[i];
+                FillPoint(cc.p0, p);
+                FillPoint(cc.p1, p);
+                FillPoint(cc.p2, p);
+                FillPoint(cc.p3, p);
 
 
+ 
+                p.DrawBezierCurve(
+                   (float)cc.p0.x, (float)cc.p0.y,
+                   (float)cc.p3.x, (float)cc.p3.y,
+                   (float)cc.p1.x, (float)cc.p1.y,
+                   (float)cc.p2.x, (float)cc.p2.y);
+            }
+
+        }
+        static void FillPoint(Vector2 v, CanvasPainter p)
+        {
+            p.FillRectangle(
+                  v.x, v.y,
+                  v.x + 3, v.y + 3);
         }
         static void DrawLineSet(CanvasPainter p, List<Point> contPoints)
         {
@@ -87,12 +134,82 @@ namespace PixelFarm.Agg.Samples
         {
             //finish the current set
             //create a simplified point set
-            var newSimplfiedSet = LineSimplifiedUtility.DouglasPeuckerReduction(currentPointSet, 15);
-            this.simplifiedPointSets.Add(newSimplfiedSet);
+            //var newSimplfiedSet = LineSimplifiedUtility.DouglasPeuckerReduction(currentPointSet, 15); 
+            //this.simplifiedPointSets.Add(newSimplfiedSet);
 
+            CreateFitCurves();
             base.MouseUp(x, y);
         }
+        string DumpPointsToString()
+        {
+            System.Text.StringBuilder stbuilder = new System.Text.StringBuilder();
+            int j = this.currentPointSet.Count;
+            stbuilder.Append("new VECTOR[]{");
+            for (int i = 0; i < j; ++i)
+            {
+                Point pp = this.currentPointSet[i];
+                stbuilder.Append("new VECTOR(" + pp.x.ToString() + "," + pp.y.ToString() + ")");
+                if (i < j - 1)
+                {
+                    stbuilder.Append(',');
+                }
+            }
+            stbuilder.Append("}");
+            return stbuilder.ToString();
+        }
+        string DumpPointsToString2()
+        {
+            System.Text.StringBuilder stbuilder = new System.Text.StringBuilder();
+            int j = this.currentPointSet.Count;
+            stbuilder.Append("new Point[]{");
+            for (int i = 0; i < j; ++i)
+            {
+                Point pp = this.currentPointSet[i];
+                stbuilder.Append("new Point(" + pp.x.ToString() + "," + pp.y.ToString() + ")");
+                if (i < j - 1)
+                {
+                    stbuilder.Append(',');
+                }
+            }
+            stbuilder.Append("}");
+            return stbuilder.ToString();
+        }
+        void CreateFitCurves()
+        {
 
+            //---------------------------------------
+            //convert point to vector  
+            int j = currentPointSet.Count;
+            List<Vector2> data = new List<Vector2>(j);
+            for (int i = 0; i < j; ++i)
+            {
+                Point pp = currentPointSet[i];
+                data.Add(new Vector2(pp.x, pp.y));
+            }
+
+            //CurvePreprocess.Linearize(data, 8);
+            //List<Vector2> reduced = CurvePreprocess.RdpReduce(data, 2);
+
+            //string code = DumpPointsToString();
+            //string code2 = DumpPointsToString2(); 
+
+            var data2 = CurvePreprocess.RdpReduce(data, 2);
+
+            j = data2.Count;
+            List<Point> simplifiedPoints = new List<Point>();
+            this.simplifiedPointSets.Add(simplifiedPoints);
+            for (int i = 0; i < j; ++i)
+            {
+                var pp = data2[i];
+                simplifiedPoints.Add(new Point((int)pp.x, (int)pp.y));
+            }
+
+
+            CubicBezier[] cubicBzs = CurveFit.Fit(data2, 8);
+            cubicCurves.AddRange(cubicBzs);
+
+
+        }
 
     }
 

@@ -64,7 +64,6 @@
     <Compile Include="3_Samples\20_PolygonClippingSample\PolygonClipping.cs" />
     <Compile Include="3_Samples\05_AlphaMask2\LionAlphaMask2.cs" />
     <Compile Include="3_Samples\07_Shading\02_GouraudSample.cs" />
-    <Compile Include="3_Samples\21_HandPaint\LineSimplifiedUtility.cs" />
     <Compile Include="3_Samples\21_HandPaint\DrippingBrush.cs" />
     <Compile Include="3_Samples\21_HandPaint\HandPaint.cs" />
     <Compile Include="3_Samples\21_HandPaint\HandPaint_LineSimplify.cs" />

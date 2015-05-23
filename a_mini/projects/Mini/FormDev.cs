@@ -19,8 +19,8 @@ namespace Mini
         {
             InitializeComponent();
             this.Load += new EventHandler(DevForm_Load);
-            this.listBox1.DoubleClick += new EventHandler(listBox1_DoubleClick); 
-            this.Text = "DevForm: Double Click The Example!"; 
+            this.listBox1.DoubleClick += new EventHandler(listBox1_DoubleClick);
+            this.Text = "DevForm: Double Click The Example!";
             //test native font
 
 
@@ -230,6 +230,18 @@ namespace Mini
                 //Compare with Gdi+ Font
                 g.DrawString(testChar.ToString(), ff, Brushes.Black, new PointF(0, 50));
             }
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            var g = pictureBox1.CreateGraphics();
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            g.DrawBezier(Pens.Red, 
+                new PointF(199, 282),
+                new PointF(199.355f, 234.659f),
+                new PointF(191.573f, 127.23f),
+                new PointF(264, 169));
         }
     }
 }
