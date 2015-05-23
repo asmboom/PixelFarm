@@ -49,25 +49,7 @@ namespace PixelFarm.Agg.Samples
                     p.StrokeColor = ColorRGBA.Red;
                     p.Draw(brushPath.vxs);
                     
-                }
-                else if (brushPath.cubicBzs != null)
-                {
-                    int ccount = brushPath.cubicBzs.Length;
-                    for (int i = 0; i < ccount; ++i)
-                    {
-                        var cc = brushPath.cubicBzs[i];
-                        //FillPoint(cc.p0, p);
-                        //FillPoint(cc.p1, p);
-                        //FillPoint(cc.p2, p);
-                        //FillPoint(cc.p3, p); 
-                        p.DrawBezierCurve(
-                           (float)cc.p0.x, (float)cc.p0.y,
-                           (float)cc.p3.x, (float)cc.p3.y,
-                           (float)cc.p1.x, (float)cc.p1.y,
-                           (float)cc.p2.x, (float)cc.p2.y);
-                    }
-
-                }
+                } 
                 else
                 {
                     var contPoints = brushPath.contPoints;

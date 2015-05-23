@@ -18,7 +18,7 @@ namespace PixelFarm.Agg.Samples
     {
         internal VertexStore vxs;
         internal List<Vector2> contPoints = new List<Vector2>();
-        internal CubicBezier[] cubicBzs;
+
 
         bool isValidSmooth = false;
 
@@ -39,9 +39,14 @@ namespace PixelFarm.Agg.Samples
         public ColorRGBA FillColor
         {
             get;
-            set; 
+            set;
         }
         public ColorRGBA StrokeColor
+        {
+            get;
+            set;
+        }
+        public SmoothBrushMode BrushMode
         {
             get;
             set;
@@ -58,7 +63,7 @@ namespace PixelFarm.Agg.Samples
             //string str2 = dbugDumpPointsToString2(contPoints); 
             //var data2 = CurvePreprocess.RdpReduce(contPoints, 2);
             var data2 = contPoints;
-            this.cubicBzs = CurveFit.Fit(data2, 8);
+            CubicBezier[] cubicBzs = CurveFit.Fit(data2, 8);
 
             //PathWriter pWriter = new PathWriter();
             //pWriter.StartFigure();
@@ -91,7 +96,7 @@ namespace PixelFarm.Agg.Samples
                 //-------------------------------
                 for (int i = 1; i < j; ++i) //start at 1
                 {
-                    CubicBezier bz = cubicBzs[i];                                          
+                    CubicBezier bz = cubicBzs[i];
                     vxs.AddP3c(bz.p1.x, bz.p1.y);
                     vxs.AddP3c(bz.p2.x, bz.p2.y);
                     vxs.AddLineTo(bz.p3.x, bz.p3.y);
@@ -100,9 +105,9 @@ namespace PixelFarm.Agg.Samples
                 //close
                 vxs.AddLineTo(bz0.p0.x, bz0.p0.y);
             }
-            vxs.AddCloseFigure(); 
+            vxs.AddCloseFigure();
             PixelFarm.Agg.VertexSource.CurveFlattener cflat = new PixelFarm.Agg.VertexSource.CurveFlattener();
-            vxs = cflat.MakeVxs(vxs); 
+            vxs = cflat.MakeVxs(vxs);
         }
         public void Close()
         {

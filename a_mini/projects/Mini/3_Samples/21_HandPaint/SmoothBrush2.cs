@@ -10,9 +10,18 @@ using PixelFarm.VectorMath;
 
 using Mini;
 using burningmime.curves; //for curve fit
+using ClipperLib;
 
 namespace PixelFarm.Agg.Samples
 {
+
+    public enum SmoothBrushMode
+    {
+        SolidBrush,
+        EraseBrush,
+        CutBrush
+    }
+
     [Info(OrderCode = "22")]
     [Info("SmoothBrush2")]
     public class SmoothBrush2 : DemoBase
@@ -28,18 +37,12 @@ namespace PixelFarm.Agg.Samples
 
         }
         [DemoConfig]
-        public bool UseEraseBrush
+        public SmoothBrushMode BrushMode
         {
             get;
             set;
         }
 
-        [DemoConfig]
-        public bool UseCutBrush
-        {
-            get;
-            set;
-        }
         public override void Draw(Graphics2D g)
         {
             if (p == null)
@@ -52,39 +55,30 @@ namespace PixelFarm.Agg.Samples
             p.Clear(ColorRGBA.White);
             p.FillColor = ColorRGBA.Black;
 
-            foreach (var brushPath in this.myBrushPathList)
+            int j = myBrushPathList.Count;
+            for (int n = 0; n < j; ++n)
             {
+                var brushPath = myBrushPathList[n];
 
                 if (brushPath.vxs != null)
                 {
-
-                    p.FillColor = brushPath.FillColor;
-                    p.Fill(brushPath.vxs);
-
-                    if (brushPath.StrokeColor.alpha > 0)
+                    switch (brushPath.BrushMode)
                     {
-                        p.StrokeColor = ColorRGBA.Red;
-                        p.Draw(brushPath.vxs);
-                    }
+                        case SmoothBrushMode.CutBrush:
+                            {
+                            } break;
+                        default:
+                            {
+                                p.FillColor = brushPath.FillColor;
+                                p.Fill(brushPath.vxs);
 
-                }
-                else if (brushPath.cubicBzs != null)
-                {
-                    int ccount = brushPath.cubicBzs.Length;
-                    for (int i = 0; i < ccount; ++i)
-                    {
-                        var cc = brushPath.cubicBzs[i];
-                        //FillPoint(cc.p0, p);
-                        //FillPoint(cc.p1, p);
-                        //FillPoint(cc.p2, p);
-                        //FillPoint(cc.p3, p); 
-                        p.DrawBezierCurve(
-                           (float)cc.p0.x, (float)cc.p0.y,
-                           (float)cc.p3.x, (float)cc.p3.y,
-                           (float)cc.p1.x, (float)cc.p1.y,
-                           (float)cc.p2.x, (float)cc.p2.y);
+                                if (brushPath.StrokeColor.alpha > 0)
+                                {
+                                    p.StrokeColor = ColorRGBA.Red;
+                                    p.Draw(brushPath.vxs);
+                                }
+                            } break;
                     }
-
                 }
                 else
                 {
@@ -97,17 +91,52 @@ namespace PixelFarm.Agg.Samples
                         p.Line(p0.x, p0.y, p1.x, p1.y);
                     }
                 }
-
             }
+
         }
         public override void MouseUp(int x, int y)
         {
             if (currentBrushPath != null)
             {
-                //currentBrushPath.Close();
                 currentBrushPath.GetSmooth();
+                switch (currentBrushPath.BrushMode)
+                {
+                    case SmoothBrushMode.CutBrush:
+                        {
+                            if (myBrushPathList.Count > 0)
+                            {
+                                //1. remove 
+                                myBrushPathList.RemoveAt(myBrushPathList.Count - 1);
+                                //
+
+                                if (myBrushPathList.Count > 0)
+                                {
+                                    var lastPath = myBrushPathList[myBrushPathList.Count - 1];
+
+                                    //do path clip***
+
+                                    PathWriter result = CombinePaths(
+                                          new VertexStoreSnap(lastPath.vxs), 
+                                          new VertexStoreSnap(currentBrushPath.vxs),
+                                          ClipType.ctDifference);
+
+                                    myBrushPathList.RemoveAt(myBrushPathList.Count - 1);
+
+                                    MyBrushPath newBrushPath = new MyBrushPath();
+                                    newBrushPath.BrushMode = lastPath.BrushMode;
+                                    newBrushPath.StrokeColor = lastPath.StrokeColor;
+                                    newBrushPath.FillColor = lastPath.FillColor;
+                                    newBrushPath.vxs = result.Vxs;
+                                    myBrushPathList.Add(newBrushPath);
+
+                                }
+                            }
+
+                        } break;
+                }
                 currentBrushPath = null;
             }
+
             base.MouseUp(x, y);
         }
         public override void MouseDrag(int x, int y)
@@ -138,21 +167,132 @@ namespace PixelFarm.Agg.Samples
         {
             latestMousePoint = new Point(x, y);
             currentBrushPath = new MyBrushPath();
-            if (this.UseEraseBrush)
+            switch (BrushMode)
             {
-                currentBrushPath.FillColor = ColorRGBA.White;
-                currentBrushPath.StrokeColor = ColorRGBA.Transparent;
-            }
-            else
-            {
-                currentBrushPath.FillColor = ColorRGBA.Black;
-                currentBrushPath.StrokeColor = ColorRGBA.Red;
+                case SmoothBrushMode.SolidBrush:
+                    currentBrushPath.FillColor = ColorRGBA.Black;
+                    currentBrushPath.StrokeColor = ColorRGBA.Red;
+                    break;
 
+                case SmoothBrushMode.EraseBrush:
+                    currentBrushPath.FillColor = ColorRGBA.White;
+                    currentBrushPath.StrokeColor = ColorRGBA.Transparent;
+                    break;
+                case SmoothBrushMode.CutBrush:
+
+                    break;
             }
+            currentBrushPath.BrushMode = this.BrushMode;
             this.myBrushPathList.Add(currentBrushPath);
             currentBrushPath.AddPointFirst(x, y);
             base.MouseDown(x, y, isRightButton);
         }
+
+
+        static PathWriter CombinePaths(VertexStoreSnap a, VertexStoreSnap b, ClipType clipType)
+        {
+            List<List<IntPoint>> aPolys = CreatePolygons(a);
+            List<List<IntPoint>> bPolys = CreatePolygons(b);
+
+            Clipper clipper = new Clipper();
+
+            clipper.AddPaths(aPolys, PolyType.ptSubject, true);
+            clipper.AddPaths(bPolys, PolyType.ptClip, true);
+
+            List<List<IntPoint>> intersectedPolys = new List<List<IntPoint>>();
+            clipper.Execute(clipType, intersectedPolys);
+
+            PathWriter output = new PathWriter();
+
+            foreach (List<IntPoint> polygon in intersectedPolys)
+            {
+                bool first = true;
+                int j = polygon.Count;
+
+                if (j > 0)
+                {
+                    //first one
+                    IntPoint point = polygon[0];
+
+                    output.MoveTo(point.X / 1000.0, point.Y / 1000.0);
+
+                    //next ...
+                    if (j > 1)
+                    {
+                        for (int i = 1; i < j; ++i)
+                        {
+                            point = polygon[i];
+                            output.LineTo(point.X / 1000.0, point.Y / 1000.0);
+                        }
+                    }
+                }
+                //foreach (IntPoint point in polygon)
+                //{
+                //    if (first)
+                //    {
+                //        output.AddVertex(point.X / 1000.0, point.Y / 1000.0, ShapePath.FlagsAndCommand.CommandMoveTo);
+                //        first = false;
+                //    }
+                //    else
+                //    {
+                //        output.AddVertex(point.X / 1000.0, point.Y / 1000.0, ShapePath.FlagsAndCommand.CommandLineTo);
+                //    }
+                //}
+
+                output.CloseFigure();
+            }
+
+
+            output.Stop();
+            return output;
+        }
+
+        static List<List<IntPoint>> CreatePolygons(VertexStoreSnap a)
+        {
+            List<List<IntPoint>> allPolys = new List<List<IntPoint>>();
+            List<IntPoint> currentPoly = null;
+            VertexData last = new VertexData();
+            VertexData first = new VertexData();
+            bool addedFirst = false;
+
+            var snapIter = a.GetVertexSnapIter();
+            VertexCmd cmd;
+            double x, y;
+            cmd = snapIter.GetNextVertex(out x, out y);
+            do
+            {
+                if (cmd == VertexCmd.LineTo)
+                {
+                    if (!addedFirst)
+                    {
+                        currentPoly.Add(new IntPoint((long)(last.x * 1000), (long)(last.y * 1000)));
+                        addedFirst = true;
+                        first = last;
+                    }
+                    currentPoly.Add(new IntPoint((long)(x * 1000), (long)(y * 1000)));
+                    last = new VertexData(cmd, x, y);
+                }
+                else
+                {
+                    addedFirst = false;
+                    currentPoly = new List<IntPoint>();
+                    allPolys.Add(currentPoly);
+                    if (cmd == VertexCmd.MoveTo)
+                    {
+                        last = new VertexData(cmd, x, y);
+                    }
+                    else
+                    {
+                        last = first;
+                    }
+                }
+                cmd = snapIter.GetNextVertex(out x, out y);
+
+            } while (cmd != VertexCmd.Stop);
+
+            return allPolys;
+        }
+
     }
 
     //--------------------------------------------------

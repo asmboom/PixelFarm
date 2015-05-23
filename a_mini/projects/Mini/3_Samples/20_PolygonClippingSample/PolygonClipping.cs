@@ -46,7 +46,7 @@ namespace PixelFarm.Agg.Sample_PolygonClipping
     [Info(OrderCode = "20")]
     public class PolygonClippingDemo : DemoBase
     {
-        PathWriter CombinePaths(VertexStoreSnap a, VertexStoreSnap b, ClipType clipType)
+        static PathWriter CombinePaths(VertexStoreSnap a, VertexStoreSnap b, ClipType clipType)
         {
             List<List<IntPoint>> aPolys = CreatePolygons(a);
             List<List<IntPoint>> bPolys = CreatePolygons(b);
@@ -104,7 +104,7 @@ namespace PixelFarm.Agg.Sample_PolygonClipping
             return output;
         }
 
-        private static List<List<IntPoint>> CreatePolygons(VertexStoreSnap a)
+        static List<List<IntPoint>> CreatePolygons(VertexStoreSnap a)
         {
             List<List<IntPoint>> allPolys = new List<List<IntPoint>>();
             List<IntPoint> currentPoly = null;
@@ -563,7 +563,7 @@ namespace PixelFarm.Agg.Sample_PolygonClipping
                             yield return new VertexData(cmd, x, y);
                         } break;
                 }
-            } 
+            }
         }
         public VertexStore MakeVxs()
         {
@@ -572,7 +572,7 @@ namespace PixelFarm.Agg.Sample_PolygonClipping
             {
                 vxs.AddVertex(v.x, v.y, v.command);
             }
-            return vxs; 
+            return vxs;
         }
         public VertexStoreSnap MakeVertexSnap()
         {
