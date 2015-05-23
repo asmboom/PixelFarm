@@ -14,8 +14,8 @@ using burningmime.curves; //for curve fit
 namespace PixelFarm.Agg.Samples
 {
     [Info(OrderCode = "22")]
-    [Info("SmoothDrippingBrush")]
-    public class SmoothDrippingBrushExample : DemoBase
+    [Info("SmoothBrush2")]
+    public class SmoothBrush2 : DemoBase
     {
 
         Point latestMousePoint;
@@ -48,7 +48,7 @@ namespace PixelFarm.Agg.Samples
 
                     p.StrokeColor = ColorRGBA.Red;
                     p.Draw(brushPath.vxs);
-                    
+
                 }
                 else if (brushPath.cubicBzs != null)
                 {
@@ -99,18 +99,14 @@ namespace PixelFarm.Agg.Samples
             Vector newPoint = new Vector(x, y);
             //find distance
             Vector oldPoint = new Vector(latestMousePoint.x, latestMousePoint.y);
-            var delta =  (newPoint - oldPoint) / 2; // 2,4 etc 
+            var delta = (newPoint - oldPoint) / 2; // 2,4 etc 
             //midpoint
             var midPoint = (newPoint + oldPoint) / 2;
+            delta = delta.NewLength(5);
+            delta.Rotate(90); 
 
-            //find angle
-            var topPoint = delta;//create top point
-            var bottomPoint = delta; //bottom point            
-            topPoint.Rotate(90);
-            bottomPoint.Rotate(-90);
-
-            var newTopPoint = midPoint + topPoint;
-            var newBottomPoint = midPoint + bottomPoint;
+            var newTopPoint = midPoint + delta;
+            var newBottomPoint = midPoint - delta;
 
 
             //bottom point

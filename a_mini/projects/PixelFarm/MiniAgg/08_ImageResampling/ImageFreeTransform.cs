@@ -163,6 +163,16 @@ namespace PixelFarm.Agg.Image
         {
             return new PointF((float)_x, (float)_y);
         }
+
+        public Vector NewLength(double newLength)
+        {
+            //radian
+            double atan = Math.Atan2(_y, _x);
+            return new Vector(Math.Cos(atan) * newLength,
+                        Math.Sin(atan) * newLength); 
+        }
+
+
     }
 
     public class FreeTransform
