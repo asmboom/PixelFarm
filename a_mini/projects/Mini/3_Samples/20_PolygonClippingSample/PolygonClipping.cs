@@ -143,6 +143,8 @@ namespace PixelFarm.Agg.Sample_PolygonClipping
                         last = first;
                     }
                 }
+                cmd = snapIter.GetNextVertex(out x, out y);
+
             } while (cmd != VertexCmd.Stop);
 
             return allPolys;

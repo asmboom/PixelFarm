@@ -33,6 +33,13 @@ namespace PixelFarm.Agg.Samples
             get;
             set;
         }
+
+        [DemoConfig]
+        public bool UseCutBrush
+        {
+            get;
+            set;
+        }
         public override void Draw(Graphics2D g)
         {
             if (p == null)
@@ -140,7 +147,7 @@ namespace PixelFarm.Agg.Samples
             {
                 currentBrushPath.FillColor = ColorRGBA.Black;
                 currentBrushPath.StrokeColor = ColorRGBA.Red;
-                
+
             }
             this.myBrushPathList.Add(currentBrushPath);
             currentBrushPath.AddPointFirst(x, y);
